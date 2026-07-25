@@ -1,0 +1,32 @@
+{
+  "name": "procureai-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
+    "@hello-pangea/dnd": "^18.0.1",
+    "@mui/icons-material": "^6.1.6",
+    "@mui/material": "^6.1.6",
+    "axios": "^1.7.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^3.10.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "jsdom": "^29.1.1",
+    "vite": "^5.4.10",
+    "vitest": "^4.1.10"
+  }
+}
