@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  email     String?
+  logo      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  vendors          Vendor[]
+  purchaseRequests PurchaseRequest[]
+  quotes           Quote[]
+  attachments      Attachment[]
+  activityLogs     ActivityLog[]
+  inviteTokens     InviteToken[]
+}
+
+model User {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  email          String   @unique
+  password       String
+  role           String   @default("manager") // admin, officer, manager (org_admin, procurement_officer, department_manager)
+  department     String?
+  bio            String?
+  avatarStyle    String   @default("big-smile") // DiceBear style preference
+  theme          String   @default("system") // light, dark, system
+  notifyOnQuote      Boolean @default(true)
+  notifyOnPO         Boolean @default(true)
+  notifyOnStatus     Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  purchaseRequests PurchaseRequest[]
+  activityLogs     ActivityLog[]
+  attachments      Attachment[]
+}
+
+model Vendor {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  email          String
+  category       String   // IT, Office Supplies, Furniture
+  phone          String?
+  onTimeDelivery Float    @default(95) // percentage
+  defectRate     Float    @default(1)  // percentage
+  rating         Float    @default(4.0) // 1-5 scale
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  quotes Quote[]
+
+  @@unique([organizationId, email])
+}
+
+model PurchaseRequest {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  itemName       String
+  category       String
+  quantity       Int
+  budget         Float
+  urgency        String   // low, medium, high, critical
+  justification  String
+  status         String   @default("pending") // pending, quoted, ordered, delivered
+  userId         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id])
+  quotes      Quote[]
+  attachments Attachment[]
+}
+
+model Quote {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  prId           String
+  vendorId       String
+  price          Float
+  deliveryDays   Int
+  createdAt      DateTime @default(now())
+
+  purchaseRequest PurchaseRequest @relation(fields: [prId], references: [id])
+  vendor          Vendor          @relation(fields: [vendorId], references: [id])
+}
+
+model Attachment {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  filename       String
+  originalName   String
+  mimeType       String
+  size           Int
+  prId           String
+  userId         String
+  createdAt      DateTime @default(now())
+
+  purchaseRequest PurchaseRequest @relation(fields: [prId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+}
+
+model InviteToken {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  token          String   @unique
+  email          String
+  role           String
+  expiresAt      DateTime
+  used           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model ActivityLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  action         String
+  entity         String
+  entityId       String?
+  details        String?
+  userId         String
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
