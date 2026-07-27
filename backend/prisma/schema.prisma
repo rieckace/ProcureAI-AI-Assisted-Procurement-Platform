@@ -22,7 +22,9 @@ model Organization {
   quotes           Quote[]
   attachments      Attachment[]
   activityLogs     ActivityLog[]
+  notifications    Notification[]
   inviteTokens     InviteToken[]
+  quoteRequests    QuoteRequest[]
 }
 
 model User {
@@ -46,6 +48,7 @@ model User {
   purchaseRequests PurchaseRequest[]
   activityLogs     ActivityLog[]
   attachments      Attachment[]
+  notifications    Notification[]
 }
 
 model Vendor {
@@ -62,7 +65,8 @@ model Vendor {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  quotes Quote[]
+  quotes         Quote[]
+  quoteRequests  QuoteRequest[]
 
   @@unique([organizationId, email])
 }
@@ -85,6 +89,7 @@ model PurchaseRequest {
   user        User         @relation(fields: [userId], references: [id])
   quotes      Quote[]
   attachments Attachment[]
+  quoteRequests QuoteRequest[]
 }
 
 model Quote {
@@ -95,7 +100,9 @@ model Quote {
   vendorId       String
   price          Float
   deliveryDays   Int
+  notes          String?
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   purchaseRequest PurchaseRequest @relation(fields: [prId], references: [id])
   vendor          Vendor          @relation(fields: [vendorId], references: [id])
@@ -127,6 +134,40 @@ model InviteToken {
   expiresAt      DateTime
   used           Boolean  @default(false)
   createdAt      DateTime @default(now())
+}
+
+model QuoteRequest {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  prId           String
+  vendorId       String
+  token          String   @unique
+  status         String   @default("pending") // pending, sent, completed, expired
+  expiresAt      DateTime
+  sentAt         DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  purchaseRequest PurchaseRequest @relation(fields: [prId], references: [id])
+  vendor          Vendor          @relation(fields: [vendorId], references: [id])
+
+  @@unique([prId, vendorId])
+}
+
+model Notification {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  type           String   // status_change, new_quote, po_issued, comment_added, vendor_added, user_invited, attachment_added
+  title          String
+  message        String?
+  link           String?  // relative URL to navigate to (e.g., /pr/some-id)
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model ActivityLog {
