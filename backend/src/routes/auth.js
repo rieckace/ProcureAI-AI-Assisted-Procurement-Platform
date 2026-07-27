@@ -114,10 +114,20 @@ router.post('/register', async (req, res) => {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, organizationSlug } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // If organization slug is provided, verify the org exists first
+    if (organizationSlug) {
+      const org = await prisma.organization.findUnique({
+        where: { slug: organizationSlug }
+      });
+      if (!org) {
+        return res.status(400).json({ error: 'Organization not found. Please check the slug.' });
+      }
     }
 
     const user = await prisma.user.findUnique({
@@ -126,6 +136,11 @@ router.post('/login', async (req, res) => {
     });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // If org slug provided, verify user belongs to that org
+    if (organizationSlug && user.organization?.slug !== organizationSlug) {
+      return res.status(401).json({ error: 'Invalid credentials for this organization' });
     }
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -142,6 +157,51 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     logger.error('auth.login', err, { email });
     res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+// GET /api/auth/org-by-slug/:slug — Look up organization by slug (public)
+router.get('/org-by-slug/:slug', async (req, res) => {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { slug: req.params.slug },
+      select: { id: true, name: true, slug: true }
+    });
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+    res.json(org);
+  } catch (err) {
+    logger.error('auth.lookupOrg', err);
+    res.status(500).json({ error: 'Failed to look up organization' });
+  }
+});
+
+// GET /api/auth/orgs/search — Search organizations by name or slug (public, with caching)
+router.get('/orgs/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+
+    if (!q || q.length < 1) {
+      return res.json({ organizations: [] });
+    }
+
+    const organizations = await prisma.organization.findMany({
+      where: {
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { slug: { contains: q, mode: 'insensitive' } },
+        ]
+      },
+      select: { id: true, name: true, slug: true },
+      take: 10,
+      orderBy: { name: 'asc' }
+    });
+
+    res.json({ organizations });
+  } catch (err) {
+    logger.error('auth.searchOrgs', err);
+    res.status(500).json({ error: 'Failed to search organizations' });
   }
 });
 

@@ -13,11 +13,12 @@ const analyticsRoutes = require('./routes/analytics');
 const attachmentRoutes = require('./routes/attachments');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notifications');
+const vendorQuoteRoutes = require('./routes/vendorQuotes');
 const prisma = require('./lib/prisma');
 const logger = require('./lib/logger');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -38,21 +39,30 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Too many authentication attempts, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// Rate limiting — disabled in development (so Playwright tests don't hit limits),
+// enabled with generous defaults in all other environments.
+const env = process.env.NODE_ENV || 'development';
+const isDev = env === 'development';
 
-const generalLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 100,
-  message: { error: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+const authLimiter = isDev
+  ? (req, res, next) => next()
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      message: { error: 'Too many authentication attempts, please try again later.' },
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
+const generalLimiter = isDev
+  ? (req, res, next) => next()
+  : rateLimit({
+      windowMs: 1 * 60 * 1000,
+      max: 200,
+      message: { error: 'Too many requests, please try again later.' },
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
 
 // Routes
 app.use('/api/auth', authLimiter, authRoutes);
@@ -65,6 +75,7 @@ app.use('/api/analytics', generalLimiter, analyticsRoutes);
 app.use('/api', generalLimiter, attachmentRoutes);
 app.use('/api/chat', generalLimiter, chatRoutes);
 app.use('/api/notifications', generalLimiter, notificationRoutes);
+app.use('/api/quotes', generalLimiter, vendorQuoteRoutes);
 
 // Health check
 app.get('/api/health', async (req, res) => {

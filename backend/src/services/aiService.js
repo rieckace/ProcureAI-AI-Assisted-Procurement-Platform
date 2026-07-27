@@ -1,8 +1,4 @@
-const Groq = require('groq-sdk');
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || 'gsk_placeholder'
-});
+const { chatCompletions } = require('./modelProvider');
 
 /**
  * Score vendors based on weighted criteria
@@ -57,17 +53,9 @@ function scoreVendors(quotes) {
 }
 
 /**
- * Generate AI recommendation using Groq
+ * Generate AI recommendation using multi-model provider with automatic fallback
  */
 async function generateRecommendation(purchaseRequest, scoredVendors) {
-  if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'gsk_placeholder') {
-    return {
-      success: false,
-      explanation: 'Groq API key not configured. Please set GROQ_API_KEY in your .env file.',
-      fallback: true
-    };
-  }
-
   try {
     const topVendor = scoredVendors[0];
     const secondVendor = scoredVendors[1];
@@ -102,14 +90,14 @@ Please provide:
 
 Format your response as a concise, professional recommendation. Keep it under 200 words.`;
 
-    const completion = await groq.chat.completions.create({
+    const { result } = await chatCompletions({
       messages: [{ role: 'user', content: prompt }],
-      model: 'llama-3.3-70b-versatile',
       temperature: 0.7,
-      max_tokens: 500
+      max_tokens: 500,
+      supportTools: false,
     });
 
-    const explanation = completion.choices[0]?.message?.content || '';
+    const explanation = result.choices[0]?.message?.content || '';
 
     return {
       success: true,
@@ -117,7 +105,7 @@ Format your response as a concise, professional recommendation. Keep it under 20
       fallback: false
     };
   } catch (err) {
-    console.error('Groq API error:', err.message);
+    console.error('AI recommendation error:', err.message);
     return {
       success: false,
       explanation: generateFallbackRecommendation(purchaseRequest, scoredVendors),
@@ -128,7 +116,7 @@ Format your response as a concise, professional recommendation. Keep it under 20
 }
 
 /**
- * Fallback recommendation when Groq is unavailable
+ * Fallback recommendation when all AI providers are unavailable
  */
 function generateFallbackRecommendation(purchaseRequest, scoredVendors) {
   if (!scoredVendors || scoredVendors.length === 0) return 'No vendor recommendations available.';

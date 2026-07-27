@@ -1,12 +1,8 @@
-const Groq = require('groq-sdk');
+const { chatCompletions, getAvailableProviders } = require('./modelProvider');
 const prisma = require('../lib/prisma');
 const { v4: uuidv4 } = require('uuid');
 const { logActivity } = require('../routes/activityLogs');
 const { sendInvitationEmail, sendQuoteRequestEmail } = require('./emailService');
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || 'gsk_placeholder'
-});
 
 /**
  * SYSTEM PROMPT — Tells Procura everything about the application
@@ -93,6 +89,69 @@ When a user asks you to perform an action (like creating a PR or updating status
 - Suggest specific actions the user can take
 - If you're unsure about something, be honest about it
 - Keep responses under 200 words unless displaying data`
+
+/**
+ * Unified local response for greetings, common questions, and offline mode.
+ * Returns a response string if the message can be handled locally, or null if AI processing is needed.
+ */
+function getLocalResponse(message, userName, userRole) {
+  const lowerMsg = message.toLowerCase().trim();
+
+  // Greetings
+  const greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'sup', 'yo', 'hola'];
+  if (greetings.some(g => lowerMsg === g || lowerMsg.startsWith(g + ' ') || lowerMsg.endsWith(' ' + g))) {
+    const hour = new Date().getHours();
+    const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    return `👋 ${timeGreeting}, **${userName}**! I'm **Procura**, your AI procurement assistant.\n\nHow can I help you today? I can assist with:\n- Creating purchase requests\n- Looking up vendors and quotes\n- Checking procurement status\n- General procurement guidance`;
+  }
+
+  // How are you / what's up
+  if (lowerMsg.includes('how are you') || lowerMsg.includes("what's up") || lowerMsg.includes("how's it going")) {
+    return `I'm doing great, thanks for asking! 😊 I'm here and ready to help you with any procurement tasks. What would you like to work on?`;
+  }
+
+  // Thank you
+  if (lowerMsg.includes('thank') || lowerMsg === 'thanks' || lowerMsg === 'thx') {
+    return `You're welcome! Happy to help. Is there anything else you need assistance with? 😊`;
+  }
+
+  // What can you do
+  if (lowerMsg.includes('what can you do') || lowerMsg.includes('help me') || lowerMsg === 'help' || lowerMsg.includes('what do you do')) {
+    return `I'm **Procura**, your AI procurement assistant! Here's what I can help you with:\n\n📝 **Create Requests** — Create purchase requests with item details, budget, and urgency\n📊 **Look Up Data** — Find purchase requests, vendors, quotes, and analytics\n📄 **Manage Vendors** — Search vendors, compare quotes, and add new vendors\n📬 **Get Notifications** — Check activity logs and recent updates\n👤 **User Management** — Invite team members (admin only)\n💡 **Get Guidance** — Ask me how procurement works or what each status means\n\nJust type what you need, and I'll help you get it done!`;
+  }
+
+  // Procurement basics
+  if (lowerMsg.includes('what is procurement') || lowerMsg.includes('explain procurement')) {
+    return `**Procurement** is the process of acquiring goods and services for your organization. Here's how it works in ProcureAI:\n\n1. **Manager creates a Purchase Request (PR)** — specifying what they need, quantity, budget, and urgency\n2. **Procurement Officers collect quotes** from vendors\n3. **AI scores vendors** based on price, delivery time, reliability, and ratings\n4. **Best vendor is selected** and a Purchase Order (PO) is issued\n5. **Items are tracked** through delivery\n\nWant me to walk you through creating your first request?`;
+  }
+
+  // Status explanation
+  if (lowerMsg.includes('status') && (lowerMsg.includes('mean') || lowerMsg.includes('explain') || lowerMsg.includes('what'))) {
+    return `Here are the **PR statuses** in the procurement lifecycle:\n\n1. 🟡 **Pending** — Created and waiting for vendor quotes\n2. 🟠 **Quoted** — At least one quote received from a vendor\n3. 🔵 **Ordered** — Purchase Order issued to the selected vendor\n4. 🟢 **Delivered** — Items received (final status)\n\nEach status represents a step forward in the procurement process. Would you like to see any specific requests?`;
+  }
+
+  // Create a purchase request
+  if (lowerMsg.includes('create') && (lowerMsg.includes('purchase') || lowerMsg.includes('request') || lowerMsg.includes('pr'))) {
+    return `📝 **How to Create a Purchase Request:**\n\n1. Go to **New Request** page (click the + button or navigate to /new-request)\n2. Fill in the details:\n   - **Item Name** — What you want to purchase\n   - **Category** — IT, Office Supplies, Furniture, Software, Services, or Equipment\n   - **Quantity** — How many units you need\n   - **Budget** — Total budget in dollars\n   - **Urgency** — Low, Medium, High, or Critical\n   - **Justification** — Why you need this (optional but recommended)\n3. Click **Submit**\n\nYour request will go to procurement officers who will collect quotes from vendors!`;
+  }
+
+  // How the system works / procurement process
+  if (lowerMsg.includes('how') && (lowerMsg.includes('work') || lowerMsg.includes('process') || lowerMsg.includes('procurement'))) {
+    return `🔄 **The Procurement Process in ProcureAI:**\n\n**Step 1: Create a Request**\nManagers create Purchase Requests (PRs) specifying what they need.\n\n**Step 2: Collect Quotes**\nProcurement Officers reach out to vendors and collect quotes.\n\n**Step 3: AI Scoring**\nThe system scores vendors based on:\n- Price (35%)\n- Delivery Time (20%)\n- Reliability (30%)\n- Rating (15%)\n\n**Step 4: Issue Purchase Order**\nThe best vendor is selected and a PO is issued.\n\n**Step 5: Track Delivery**\nItems are tracked until delivered.\n\nWant me to help you create a new request?`;
+  }
+
+  // Vendor information
+  if (lowerMsg.includes('vendor') && (lowerMsg.includes('add') || lowerMsg.includes('manage') || lowerMsg.includes('find'))) {
+    return `📄 **Vendor Management:**\n\n**To Add a New Vendor:**\n1. Go to **Vendor Management** (/manage-vendors)\n2. Click **Add Vendor**\n3. Fill in vendor details:\n   - Name, Email, Phone\n   - Category (IT, Office Supplies, etc.)\n   - Address\n4. Save the vendor\n\n**To View Vendors:**\n- Visit /manage-vendors to see all vendors\n- Use the search and filter options to find specific vendors\n\nVendors can then be assigned to quotes for purchase requests!`;
+  }
+
+  // Dashboard information
+  if (lowerMsg.includes('dashboard') || lowerMsg.includes('where')) {
+    return `📊 **Your Dashboards:**\n\n**Manager Dashboard** (/manager-dashboard)\n- View your own purchase requests\n- Track request status\n- Create new requests\n\n**Officer Dashboard** (/officer-dashboard)\n- View all organization requests\n- Manage vendor quotes\n- Update request statuses\n\n**Admin Panel** (/admin)\n- Manage users\n- View system settings\n- Invite new team members\n\nWhich dashboard would you like to visit?`;
+  }
+
+  return null; // Not a local response, needs AI processing
+}
 
 /**
  * Tool definitions for Groq function calling
@@ -709,7 +768,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         return JSON.stringify({ error: 'Missing required fields: prId, status' });
       }
 
-      const validStatuses = ['pending', 'quoted', 'ordered', 'delivered'];
+      const validStatuses = ['pending', 'quoted', 'ordered', 'delivered', 'rejected'];
       if (!validStatuses.includes(parsed.status)) {
         return JSON.stringify({ error: `Status must be one of: ${validStatuses.join(', ')}` });
       }
@@ -719,7 +778,22 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
       });
 
       if (!existingPr) {
-        return JSON.stringify({ error: 'Purchase request not found' });
+        return JSON.stringify({ error: 'Purchase request not found.' });
+      }
+
+      const VALID_TRANSITIONS = {
+        pending:  ['quoted', 'rejected'],
+        quoted:   ['ordered', 'pending', 'rejected'],
+        ordered:  ['delivered', 'quoted'],
+        delivered: [],
+        rejected:  [],
+      };
+
+      const allowed = VALID_TRANSITIONS[existingPr.status] || [];
+      if (!allowed.includes(parsed.status)) {
+        return JSON.stringify({
+          error: `Cannot transition from "${existingPr.status}" to "${parsed.status}". Allowed transitions: ${allowed.length > 0 ? allowed.join(', ') : 'none (terminal state)'}`
+        });
       }
 
       const updated = await prisma.purchaseRequest.update({
@@ -964,9 +1038,21 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
 async function processMessage(message, context) {
   const { userId, organizationId, userRole, userName, currentPage } = context;
 
-  if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'gsk_placeholder') {
+  // Check for local responses first (greetings, common questions - no API needed, instant response)
+  const localResponse = getLocalResponse(message, userName, userRole);
+  if (localResponse) {
     return {
-      message: "👋 Hi! I'm Procura, your AI procurement assistant. I'm currently running in **offline mode** because the Groq API key isn't configured yet.\n\nI can still help with general guidance about the system! Ask me things like:\n- *\"How do I create a purchase request?\"*\n- *\"What does each status mean?\"*\n- *\"Walk me through the procurement process\"*\n\nTo enable my full capabilities (live data lookup and actions), an admin needs to set the `GROQ_API_KEY` in the backend `.env` file. 🚀",
+      message: localResponse,
+      fallback: false,
+      suggestions: getDefaultSuggestions(userRole),
+    };
+  }
+
+  // Check if any AI providers are configured
+  const availableProviders = getAvailableProviders();
+  if (availableProviders.length === 0) {
+    return {
+      message: "👋 Hi! I'm Procura, your AI procurement assistant. I'm currently running in **offline mode** because the Groq API key isn't configured yet.\n\nI can still help with general guidance about the system! Ask me things like:\n- *\"How do I create a purchase request?\"*\n- *\"What does each status mean?\"*\n- *\"Walk me through the procurement process\"*\n\nTo enable my full AI capabilities, set `GROQ_API_KEY` in the backend `.env` file. Get a free key at https://console.groq.com 🚀",
       fallback: true,
       suggestions: [
         { text: 'How do I create a request?', action: 'help' },
@@ -977,7 +1063,7 @@ async function processMessage(message, context) {
   }
 
   try {
-    // Build messages array for Groq
+    // Build messages array
     const messages = [
       {
         role: 'system',
@@ -986,9 +1072,8 @@ async function processMessage(message, context) {
       { role: 'user', content: message }
     ];
 
-    // First API call — let Groq decide if it needs to use tools
-    const initialResponse = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+    // First API call — let the AI decide if it needs to use tools (with automatic fallback)
+    const { result: initialResponse, provider: usedProvider } = await chatCompletions({
       messages,
       tools: TOOLS,
       tool_choice: 'auto',
@@ -1005,6 +1090,7 @@ async function processMessage(message, context) {
         message: choice.message.content || 'I\'m not sure how to help with that. Could you rephrase your question?',
         fallback: false,
         suggestions: getDefaultSuggestions(userRole),
+        provider: usedProvider,
       };
     }
 
@@ -1034,18 +1120,18 @@ async function processMessage(message, context) {
       } catch {}
     }
 
-    // Send tool results back to Groq for natural language formatting
+    // Send tool results back for natural language formatting (with automatic fallback)
     const finalMessages = [
       ...messages,
       choice.message,
       ...toolResults,
     ];
 
-    const finalResponse = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+    const { result: finalResponse } = await chatCompletions({
       messages: finalMessages,
       temperature: 0.7,
       max_tokens: 800,
+      supportTools: false, // No tools needed for final formatting
     });
 
     const finalContent = finalResponse.choices[0]?.message?.content || 
@@ -1058,12 +1144,28 @@ async function processMessage(message, context) {
       message: finalContent,
       fallback: false,
       suggestions,
+      provider: usedProvider,
     };
 
   } catch (err) {
     console.error('Chat service error:', err.message);
+    
+    // Provide specific error messages based on error type
+    let errorMessage;
+    if (err.message?.includes('No AI providers')) {
+      errorMessage = 'No AI providers are configured. Please add at least one API key (GROQ_API_KEY, CEREBRAS_API_KEY, etc.) to the backend .env file. 🔧';
+    } else if (err.message?.includes('All AI providers failed')) {
+      errorMessage = 'All AI providers are temporarily unavailable. Please try again in a moment. The system will automatically retry with different providers. 🔄';
+    } else if (err.message?.includes('timeout') || err.message?.includes('TIMEOUT')) {
+      errorMessage = 'The request timed out. The AI service might be experiencing high traffic. Please try again. ⏱️';
+    } else if (err.message?.includes('ECONNREFUSED') || err.message?.includes('network')) {
+      errorMessage = 'Cannot connect to the AI service. Please check your internet connection. 🌐';
+    } else {
+      errorMessage = 'Sorry, I encountered an error while processing your request. Please try again in a moment. 🙏';
+    }
+    
     return {
-      message: `Sorry, I encountered an error while processing your request. ${err.message.includes('API key') ? 'The AI service needs to be configured.' : 'Please try again in a moment.'} 🙏`,
+      message: errorMessage,
       fallback: true,
       suggestions: getDefaultSuggestions(userRole),
     };

@@ -3,8 +3,17 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logActivity } = require('./activityLogs');
-const { notifyStatusChange } = require('../services/notificationService');
+const { notifyStatusChange, createNotification, createNotificationForRole } = require('../services/notificationService');
 const logger = require('../lib/logger');
+
+// Valid status transitions — enforces a proper state machine
+const VALID_TRANSITIONS = {
+  pending:  ['quoted', 'rejected'],
+  quoted:   ['ordered', 'pending', 'rejected'],
+  ordered:  ['delivered', 'quoted'],
+  delivered: [],
+  rejected:  [],
+};
 
 // POST /api/purchase-requests - Create PR (managers only)
 router.post('/', authenticate, authorize('manager', 'admin'), async (req, res) => {
@@ -43,6 +52,16 @@ router.post('/', authenticate, authorize('manager', 'admin'), async (req, res) =
     });
 
     logActivity(req.user.id, 'created', 'PurchaseRequest', pr.id, `Created PR: ${itemName}`, req.user.organizationId);
+
+    // Notify officers about the new PR
+    createNotificationForRole({
+      organizationId: req.user.organizationId,
+      role: 'officer',
+      type: 'status_change',
+      title: `📝 New PR: ${itemName}`,
+      message: `${req.user.name} created a purchase request for "${itemName}" — $${parseFloat(budget).toLocaleString()} (${urgency} urgency)`,
+      link: `/pr/${pr.id}`,
+    });
 
     res.status(201).json(pr);
   } catch (err) {
@@ -183,14 +202,14 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// PATCH /api/purchase-requests/:id/status - Update PR status
+// PATCH /api/purchase-requests/:id/status - Update PR status (with state machine validation)
 router.patch('/:id/status', authenticate, authorize('officer', 'admin'), async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ['pending', 'quoted', 'ordered', 'delivered'];
+    const allStatuses = ['pending', 'quoted', 'ordered', 'delivered', 'rejected'];
 
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
+    if (!status || !allStatuses.includes(status)) {
+      return res.status(400).json({ error: `Status must be one of: ${allStatuses.join(', ')}` });
     }
 
     const existingPr = await prisma.purchaseRequest.findUnique({ where: { id: req.params.id } });
@@ -198,20 +217,45 @@ router.patch('/:id/status', authenticate, authorize('officer', 'admin'), async (
       return res.status(404).json({ error: 'Purchase request not found' });
     }
 
+    if (existingPr.status === status) {
+      return res.status(400).json({ error: `Status is already "${status}"` });
+    }
+
+    const allowed = VALID_TRANSITIONS[existingPr.status] || [];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({
+        error: `Cannot transition from "${existingPr.status}" to "${status}". Allowed transitions: ${allowed.length > 0 ? allowed.join(', ') : 'none (terminal state)'}`
+      });
+    }
+
     const pr = await prisma.purchaseRequest.update({
       where: { id: req.params.id },
       data: { status }
     });
 
-    logActivity(req.user.id, 'status_changed', 'PurchaseRequest', req.params.id, `Status changed to ${status}`, req.user.organizationId);
+    logActivity(req.user.id, 'status_changed', 'PurchaseRequest', req.params.id, `Status changed from ${existingPr.status} to ${status}`, req.user.organizationId);
 
-    // Notify the requester via email
     notifyStatusChange(req.params.id, status, req.user.name);
 
     res.json(pr);
   } catch (err) {
     logger.error('pr.updateStatus', err, { prId: req.params.id });
     res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
+// GET /api/purchase-requests/:id/valid-transitions - Get valid next statuses
+router.get('/:id/valid-transitions', authenticate, async (req, res) => {
+  try {
+    const pr = await prisma.purchaseRequest.findUnique({ where: { id: req.params.id } });
+    if (!pr || pr.organizationId !== req.user.organizationId) {
+      return res.status(404).json({ error: 'Purchase request not found' });
+    }
+    const transitions = VALID_TRANSITIONS[pr.status] || [];
+    res.json({ currentStatus: pr.status, validTransitions: transitions });
+  } catch (err) {
+    logger.error('pr.validTransitions', err, { prId: req.params.id });
+    res.status(500).json({ error: 'Failed to fetch valid transitions' });
   }
 });
 
@@ -284,6 +328,12 @@ router.patch('/:id/cancel', authenticate, authorize('manager', 'admin'), async (
     if (existingPr.status === 'ordered' || existingPr.status === 'delivered') {
       return res.status(400).json({ error: 'Cannot cancel an ordered or delivered request' });
     }
+
+    // Cancel all pending/sent quote requests for this PR
+    await prisma.quoteRequest.updateMany({
+      where: { prId: req.params.id, status: { in: ['pending', 'sent'] } },
+      data: { status: 'cancelled' },
+    });
 
     const pr = await prisma.purchaseRequest.update({
       where: { id: req.params.id },

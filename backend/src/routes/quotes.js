@@ -1,12 +1,327 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
 const { scoreVendors, generateRecommendation } = require('../services/aiService');
-const { sendQuoteRequestEmail, sendPurchaseOrderEmail } = require('../services/emailService');
+const { sendQuoteRequestEmail, sendPurchaseOrderEmail, sendVendorQuoteEmail } = require('../services/emailService');
 const { logActivity } = require('./activityLogs');
 const { notifyQuoteReceived, notifyPOIssued } = require('../services/notificationService');
 const logger = require('../lib/logger');
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// POST /api/purchase-requests/:id/send-requests - Send quote request emails to vendors
+router.post('/:id/send-requests', authenticate, authorize('officer', 'admin'), async (req, res) => {
+  try {
+    const { vendorIds } = req.body;
+
+    if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+      return res.status(400).json({ error: 'At least one vendor ID is required' });
+    }
+
+    const pr = await prisma.purchaseRequest.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!pr || pr.organizationId !== req.user.organizationId) {
+      return res.status(404).json({ error: 'Purchase request not found' });
+    }
+
+    if (pr.status === 'ordered' || pr.status === 'delivered' || pr.status === 'rejected') {
+      return res.status(400).json({ error: 'Cannot send quote requests for an ordered, delivered, or rejected request' });
+    }
+
+    const vendors = await prisma.vendor.findMany({
+      where: { id: { in: vendorIds }, organizationId: req.user.organizationId }
+    });
+
+    if (vendors.length === 0) {
+      return res.status(404).json({ error: 'No valid vendors found' });
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const results = [];
+
+    for (const vendor of vendors) {
+      const existingQuote = await prisma.quote.findFirst({
+        where: { prId: pr.id, vendorId: vendor.id }
+      });
+      if (existingQuote) {
+        results.push({ vendorId: vendor.id, vendorName: vendor.name, status: 'skipped', reason: 'Quote already exists' });
+        continue;
+      }
+
+      const existingRequest = await prisma.quoteRequest.findFirst({
+        where: { prId: pr.id, vendorId: vendor.id }
+      });
+
+      if (existingRequest) {
+        // If already completed, skip
+        if (existingRequest.status === 'completed') {
+          results.push({ vendorId: vendor.id, vendorName: vendor.name, status: 'skipped', reason: 'Quote already submitted' });
+          continue;
+        }
+        // If still active, skip
+        if ((existingRequest.status === 'sent' || existingRequest.status === 'pending') && new Date(existingRequest.expiresAt) > new Date()) {
+          results.push({ vendorId: vendor.id, vendorName: vendor.name, status: 'skipped', reason: 'Request already pending' });
+          continue;
+        }
+        // Otherwise (cancelled or expired) — update the existing record instead of creating a new one
+        const token = crypto.randomBytes(32).toString('hex');
+
+        await prisma.quoteRequest.update({
+          where: { id: existingRequest.id },
+          data: {
+            token,
+            status: 'sent',
+            sentAt: new Date(),
+            expiresAt,
+            completedAt: null,
+          }
+        });
+
+        const quoteFormUrl = `${FRONTEND_URL}/vendor-quote/${token}`;
+
+        let emailResult = null;
+        try {
+          emailResult = await sendVendorQuoteEmail(
+            vendor.email,
+            vendor.name,
+            {
+              itemName: pr.itemName,
+              category: pr.category,
+              quantity: pr.quantity,
+              budget: pr.budget,
+              urgency: pr.urgency,
+              justification: pr.justification,
+            },
+            quoteFormUrl,
+            expiresAt
+          );
+        } catch (emailErr) {
+          logger.warn('quotes.sendRequests.emailFailed', emailErr.message, { vendorId: vendor.id });
+        }
+
+        results.push({
+          vendorId: vendor.id,
+          vendorName: vendor.name,
+          status: emailResult ? 'sent' : 'email_failed',
+          emailSent: !!emailResult,
+          renewed: true,
+        });
+        continue;
+      }
+
+      const token = crypto.randomBytes(32).toString('hex');
+
+      const quoteRequest = await prisma.quoteRequest.create({
+        data: {
+          prId: pr.id,
+          vendorId: vendor.id,
+          organizationId: req.user.organizationId,
+          token,
+          status: 'sent',
+          sentAt: new Date(),
+          expiresAt,
+        }
+      });
+
+      const quoteFormUrl = `${FRONTEND_URL}/vendor-quote/${token}`;
+
+      let emailResult = null;
+      try {
+        emailResult = await sendVendorQuoteEmail(
+          vendor.email,
+          vendor.name,
+          {
+            itemName: pr.itemName,
+            category: pr.category,
+            quantity: pr.quantity,
+            budget: pr.budget,
+            urgency: pr.urgency,
+            justification: pr.justification,
+          },
+          quoteFormUrl,
+          expiresAt
+        );
+      } catch (emailErr) {
+        logger.warn('quotes.sendRequests.emailFailed', emailErr.message, { vendorId: vendor.id });
+      }
+
+      results.push({
+        vendorId: vendor.id,
+        vendorName: vendor.name,
+        status: emailResult ? 'sent' : 'email_failed',
+        emailSent: !!emailResult,
+      });
+    }
+
+    logActivity(
+      req.user.id,
+      'sent_quote_requests',
+      'PurchaseRequest',
+      pr.id,
+      `Sent quote requests to ${results.filter(r => r.status === 'sent').length} vendor(s)`,
+      req.user.organizationId
+    );
+
+    res.json({
+      message: 'Quote requests processed',
+      results,
+      expiresAt,
+    });
+  } catch (err) {
+    logger.error('quotes.sendRequests', err);
+    res.status(500).json({ error: 'Failed to send quote requests' });
+  }
+});
+
+// GET /api/purchase-requests/:id/quote-requests - Get quote request status for a PR
+router.get('/:id/quote-requests', authenticate, async (req, res) => {
+  try {
+    const requests = await prisma.quoteRequest.findMany({
+      where: { prId: req.params.id, organizationId: req.user.organizationId },
+      include: { vendor: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(requests);
+  } catch (err) {
+    logger.error('quotes.listQuoteRequests', err);
+    res.status(500).json({ error: 'Failed to fetch quote requests' });
+  }
+});
+
+// POST /api/purchase-requests/:id/resend-request/:requestId - Resend expired quote request
+router.post('/:id/resend-request/:requestId', authenticate, authorize('officer', 'admin'), async (req, res) => {
+  try {
+    const quoteRequest = await prisma.quoteRequest.findUnique({
+      where: { id: req.params.requestId },
+      include: { vendor: true, purchaseRequest: true }
+    });
+
+    if (!quoteRequest || quoteRequest.organizationId !== req.user.organizationId) {
+      return res.status(404).json({ error: 'Quote request not found' });
+    }
+
+    if (quoteRequest.prId !== req.params.id) {
+      return res.status(400).json({ error: 'Quote request does not belong to this purchase request' });
+    }
+
+    if (quoteRequest.status === 'completed') {
+      return res.status(400).json({ error: 'Cannot resend — vendor has already submitted a quote' });
+    }
+
+    const existingQuote = await prisma.quote.findFirst({
+      where: { prId: quoteRequest.prId, vendorId: quoteRequest.vendorId }
+    });
+    if (existingQuote) {
+      return res.status(400).json({ error: 'Cannot resend — a quote already exists for this vendor' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await prisma.quoteRequest.update({
+      where: { id: quoteRequest.id },
+      data: {
+        token,
+        status: 'sent',
+        sentAt: new Date(),
+        expiresAt,
+        completedAt: null,
+      }
+    });
+
+    const quoteFormUrl = `${FRONTEND_URL}/vendor-quote/${token}`;
+
+    let emailResult = null;
+    try {
+      emailResult = await sendVendorQuoteEmail(
+        quoteRequest.vendor.email,
+        quoteRequest.vendor.name,
+        {
+          itemName: quoteRequest.purchaseRequest.itemName,
+          category: quoteRequest.purchaseRequest.category,
+          quantity: quoteRequest.purchaseRequest.quantity,
+          budget: quoteRequest.purchaseRequest.budget,
+          urgency: quoteRequest.purchaseRequest.urgency,
+          justification: quoteRequest.purchaseRequest.justification,
+        },
+        quoteFormUrl,
+        expiresAt
+      );
+    } catch (emailErr) {
+      logger.warn('quotes.resendRequest.emailFailed', emailErr.message, { vendorId: quoteRequest.vendorId });
+    }
+
+    logActivity(
+      req.user.id,
+      'resent_quote_request',
+      'PurchaseRequest',
+      quoteRequest.prId,
+      `Resent quote request to ${quoteRequest.vendor.name}`,
+      req.user.organizationId
+    );
+
+    res.json({
+      message: emailResult ? 'Quote request resent successfully' : 'Request resent but email failed',
+      emailSent: !!emailResult,
+    });
+  } catch (err) {
+    logger.error('quotes.resendRequest', err);
+    res.status(500).json({ error: 'Failed to resend quote request' });
+  }
+});
+
+// POST /api/purchase-requests/:id/cancel-request/:requestId - Cancel a pending/sent quote request (officer/admin)
+router.post('/:id/cancel-request/:requestId', authenticate, authorize('officer', 'admin'), async (req, res) => {
+  try {
+    const quoteRequest = await prisma.quoteRequest.findUnique({
+      where: { id: req.params.requestId },
+      include: { vendor: true, purchaseRequest: true }
+    });
+
+    if (!quoteRequest || quoteRequest.organizationId !== req.user.organizationId) {
+      return res.status(404).json({ error: 'Quote request not found' });
+    }
+
+    if (quoteRequest.prId !== req.params.id) {
+      return res.status(400).json({ error: 'Quote request does not belong to this purchase request' });
+    }
+
+    if (quoteRequest.status === 'completed') {
+      return res.status(400).json({ error: 'Cannot cancel — vendor has already submitted a quote' });
+    }
+
+    if (quoteRequest.status === 'cancelled') {
+      return res.status(400).json({ error: 'Quote request is already cancelled' });
+    }
+
+    await prisma.quoteRequest.update({
+      where: { id: quoteRequest.id },
+      data: { status: 'cancelled' }
+    });
+
+    logActivity(
+      req.user.id,
+      'cancelled_quote_request',
+      'PurchaseRequest',
+      quoteRequest.prId,
+      `Cancelled quote request to ${quoteRequest.vendor.name}`,
+      req.user.organizationId
+    );
+
+    res.json({ message: 'Quote request cancelled successfully' });
+  } catch (err) {
+    logger.error('quotes.cancelRequest', err);
+    res.status(500).json({ error: 'Failed to cancel quote request' });
+  }
+});
 
 // DELETE /api/purchase-requests/:prId/quotes/:quoteId - Delete a quote (officer/admin)
 router.delete('/:prId/quotes/:quoteId', authenticate, authorize('officer', 'admin'), async (req, res) => {
@@ -18,6 +333,21 @@ router.delete('/:prId/quotes/:quoteId', authenticate, authorize('officer', 'admi
 
     if (!quote || quote.organizationId !== req.user.organizationId) {
       return res.status(404).json({ error: 'Quote not found' });
+    }
+
+    // If a quote request exists for this vendor+PR, reset it so the officer can resend
+    const existingQuoteRequest = await prisma.quoteRequest.findFirst({
+      where: { prId: quote.prId, vendorId: quote.vendorId, status: 'completed' }
+    });
+    if (existingQuoteRequest) {
+      // Set to cancelled — the officer must explicitly resend (which will generate a new token + email)
+      await prisma.quoteRequest.update({
+        where: { id: existingQuoteRequest.id },
+        data: {
+          status: 'cancelled',
+          completedAt: null,
+        }
+      });
     }
 
     await prisma.quote.delete({ where: { id: req.params.quoteId } });
@@ -65,6 +395,10 @@ router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (r
       return res.status(404).json({ error: 'Purchase request not found' });
     }
 
+    if (pr.status === 'ordered' || pr.status === 'delivered' || pr.status === 'rejected') {
+      return res.status(400).json({ error: 'Cannot add quotes to an ordered, delivered, or rejected request' });
+    }
+
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId }
     });
@@ -102,28 +436,12 @@ router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (r
 
     logActivity(req.user.id, 'added_quote', 'PurchaseRequest', req.params.id, `Added quote from ${vendor.name}: $${price}`, req.user.organizationId);
 
-    // Notify the requester
     notifyQuoteReceived(req.params.id, vendor.name, parseFloat(price));
-
-    // Send email to vendor
-    let emailResult = null;
-    try {
-      emailResult = await sendQuoteRequestEmail(vendor.email, vendor.name, {
-        itemName: pr.itemName,
-        category: pr.category,
-        quantity: pr.quantity,
-        budget: pr.budget,
-        urgency: pr.urgency,
-        justification: pr.justification
-      });
-    } catch (emailErr) {
-      logger.warn('quotes.addQuote.sendEmail', emailErr.message);
-    }
 
     res.status(201).json({
       quote,
-      emailSent: !!emailResult,
-      etherealUrl: emailResult?.previewUrl || null
+      emailSent: false,
+      etherealUrl: null
     });
   } catch (err) {
     logger.error('quotes.addQuote', err);
@@ -224,8 +542,8 @@ router.post('/:id/issue-po', authenticate, authorize('officer', 'admin'), async 
       return res.status(404).json({ error: 'Purchase request not found' });
     }
 
-    if (pr.status === 'ordered' || pr.status === 'delivered') {
-      return res.status(400).json({ error: 'Purchase order already issued for this request' });
+    if (pr.status === 'ordered' || pr.status === 'delivered' || pr.status === 'rejected') {
+      return res.status(400).json({ error: 'Cannot issue PO for an ordered, delivered, or rejected request' });
     }
 
     let quote;

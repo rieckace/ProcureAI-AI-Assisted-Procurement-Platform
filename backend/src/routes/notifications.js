@@ -4,40 +4,28 @@ const prisma = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../lib/logger');
 
-// GET /api/notifications - Fetch recent notifications for the current user
+// GET /api/notifications - Fetch unread notifications for the current user
 router.get('/', authenticate, async (req, res) => {
   try {
-    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 20), 50);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 50), 100);
 
-    // Get activity logs from the user's organization, highlighting actions relevant to this user
-    const notifications = await prisma.activityLog.findMany({
-      where: {
-        organizationId: req.user.organizationId,
-        // For managers, only show their own PR-related activities
-        ...(req.user.role === 'manager' && {
-          OR: [
-            { userId: req.user.id },
-            { details: { contains: req.user.id, mode: 'insensitive' } },
-          ],
-        }),
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, role: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    const includeRead = req.query.includeRead === 'true';
+    const whereClause = {
+      userId: req.user.id,
+      organizationId: req.user.organizationId,
+      ...(includeRead ? {} : { read: false }),
+    };
 
-    // Count unread — since we don't have a read status model yet,
-    // treat anything newer than the user's last visit as "unread"
-    // For now, return everything and let the frontend track
-    const lastViewed = req.headers['x-last-viewed']
-      ? new Date(parseInt(req.headers['x-last-viewed']))
-      : new Date(Date.now() - 5 * 60 * 1000); // default: last 5 min
-
-    const unreadCount = notifications.filter(n => new Date(n.createdAt) > lastViewed).length;
+    const [notifications, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      prisma.notification.count({
+        where: { userId: req.user.id, organizationId: req.user.organizationId, read: false },
+      }),
+    ]);
 
     res.json({
       data: notifications,
@@ -50,9 +38,51 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// PATCH /api/notifications/read - Mark notifications as read (dummy endpoint for future use)
-router.patch('/read', authenticate, (req, res) => {
-  res.json({ message: 'Notifications marked as read' });
+// POST /api/notifications/read/:id - Mark a single notification as read
+router.post('/read/:id', authenticate, async (req, res) => {
+  try {
+    const notif = await prisma.notification.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+    if (!notif) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    await prisma.notification.update({
+      where: { id: req.params.id },
+      data: { read: true },
+    });
+    res.json({ message: 'Notification marked as read' });
+  } catch (err) {
+    logger.error('notifications.read', err);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+// POST /api/notifications/read-all - Mark all notifications as read
+router.post('/read-all', authenticate, async (req, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id, organizationId: req.user.organizationId, read: false },
+      data: { read: true },
+    });
+    res.json({ message: 'All notifications marked as read' });
+  } catch (err) {
+    logger.error('notifications.readAll', err);
+    res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
+});
+
+// DELETE /api/notifications/:id - Delete a notification
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    await prisma.notification.deleteMany({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+    res.json({ message: 'Notification deleted' });
+  } catch (err) {
+    logger.error('notifications.delete', err);
+    res.status(500).json({ error: 'Failed to delete notification' });
+  }
 });
 
 module.exports = router;

@@ -87,7 +87,7 @@ function getQuoteRequestTemplate(vendorName, pr, frontendUrl) {
     </p>
 
     <div style="text-align: center; margin: 25px 0;">
-      <a href="${frontendUrl}" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">Submit Quote</a>
+      <a href="${frontendUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">Submit Quote</a>
     </div>
 
     <p style="color: #999; font-size: 13px; margin: 20px 0 0; font-style: italic;">
@@ -137,7 +137,7 @@ function getPurchaseOrderTemplate(vendorName, po, frontendUrl) {
     </div>
 
     <div style="text-align: center; margin: 25px 0;">
-      <a href="${frontendUrl}" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">View Order Details</a>
+      <a href="${frontendUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">View Order Details</a>
     </div>
 
     <p style="color: #555; font-size: 14px; margin: 20px 0 0; line-height: 1.6;">
@@ -175,14 +175,83 @@ function getInvitationTemplate(userEmail, invitationLink, orgName) {
     </p>
 
     <div style="text-align: center; margin: 25px 0;">
-      <a href="${invitationLink}" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 6px; font-size: 16px; font-weight: 500;">
+      <a href="${invitationLink}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 6px; font-size: 16px; font-weight: 500;">
         Accept Invitation
       </a>
     </div>
 
     <p style="color: #999; font-size: 13px; margin: 20px 0 0;">
       If the button doesn't work, copy and paste this link into your browser:<br/>
-      <a href="${invitationLink}" style="color: #1a73e8; word-break: break-all;">${invitationLink}</a>
+      <a href="${invitationLink}" target="_blank" rel="noopener noreferrer" style="color: #1a73e8; word-break: break-all;">${invitationLink}</a>
+    </p>
+  `;
+
+  return getBaseTemplate(content);
+}
+
+/**
+ * Vendor Quote Submission Email Template
+ * Sent to vendors with a unique link to fill in their quote
+ */
+function getVendorQuoteEmailTemplate(vendorName, pr, quoteFormUrl, expiresAt) {
+  const expiryDate = new Date(expiresAt).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  const content = `
+    <h2 style="color: #1a73e8; margin: 0 0 20px;">📋 Quote Request — Action Required</h2>
+    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Dear <strong>${vendorName}</strong>,</p>
+    <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
+      You have been invited to submit a quote for the following procurement request. Please review the details below and submit your proposal using the secure link.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 140px;">Item</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${pr.itemName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Category</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${pr.category}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Quantity</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${pr.quantity} units</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Budget</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #1a73e8; font-size: 14px; font-weight: 600;">$${pr.budget.toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Urgency</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; text-transform: capitalize;">${pr.urgency}</td>
+      </tr>
+      ${pr.justification ? `
+      <tr>
+        <td style="padding: 8px 12px; color: #666; font-size: 13px;">Justification</td>
+        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${pr.justification}</td>
+      </tr>` : ''}
+    </table>
+
+    <div style="background-color: #fff3e0; border-left: 4px solid #f9a825; border-radius: 4px; padding: 12px 16px; margin-bottom: 25px;">
+      <p style="color: #e65100; font-size: 13px; margin: 0; font-weight: 500;">
+        ⏰ Deadline: Please submit your quote by <strong>${expiryDate}</strong>.
+      </p>
+    </div>
+
+    <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
+      Click the button below to submit your price and delivery timeline. This is a secure, one-time link — no login required.
+    </p>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${quoteFormUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 6px; font-size: 16px; font-weight: 500;">
+        Submit Your Quote
+      </a>
+    </div>
+
+    <p style="color: #999; font-size: 13px; margin: 20px 0 0;">
+      If the button doesn't work, copy and paste this link into your browser:<br/>
+      <a href="${quoteFormUrl}" target="_blank" rel="noopener noreferrer" style="color: #1a73e8; word-break: break-all;">${quoteFormUrl}</a>
     </p>
   `;
 
@@ -192,5 +261,6 @@ function getInvitationTemplate(userEmail, invitationLink, orgName) {
 module.exports = {
   getQuoteRequestTemplate,
   getPurchaseOrderTemplate,
-  getInvitationTemplate
+  getInvitationTemplate,
+  getVendorQuoteEmailTemplate
 };

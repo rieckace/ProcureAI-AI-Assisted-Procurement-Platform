@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { processMessage } = require('../services/chatService');
+const { getModelStatus } = require('../services/modelProvider');
 const logger = require('../lib/logger');
 
 // POST /api/chat — Send a message to Procura
@@ -67,6 +68,12 @@ router.get('/suggestions', authenticate, async (req, res) => {
 
   const suggestions = roleSuggestions[req.user.role] || roleSuggestions.manager;
   res.json({ suggestions, role: req.user.role, name: req.user.name });
+});
+
+// GET /api/chat/providers — Get status of configured AI providers
+router.get('/providers', authenticate, async (req, res) => {
+  const status = getModelStatus();
+  res.json({ providers: status });
 });
 
 module.exports = router;

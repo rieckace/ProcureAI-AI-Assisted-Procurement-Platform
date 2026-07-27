@@ -1,26 +1,44 @@
 const nodemailer = require('nodemailer');
-const { getQuoteRequestTemplate, getPurchaseOrderTemplate, getInvitationTemplate } = require('../templates/emailTemplates');
+const { getQuoteRequestTemplate, getPurchaseOrderTemplate, getInvitationTemplate, getVendorQuoteEmailTemplate } = require('../templates/emailTemplates');
 const logger = require('../lib/logger');
 
 let transporter = null;
+let transporterReady = false;
 
 /**
  * Create a local SMTP transporter using MailDev
  * MailDev runs on localhost:1025 (SMTP) and localhost:1080 (Web UI)
  */
 async function initTransporter() {
-  if (transporter) return transporter;
+  if (transporterReady) return transporter;
 
-  transporter = nodemailer.createTransport({
-    host: 'localhost',
-    port: 1025,
-    secure: false,
-    ignoreTLS: true
-  });
+  try {
+    transporter = nodemailer.createTransport({
+      host: 'localhost',
+      port: 1025,
+      secure: false,
+      ignoreTLS: true,
+      connectionTimeout: 3000,
+    });
 
-  logger.info('emailService.initMailDev', 'MailDev transporter initialized on localhost:1025');
-
-  return transporter;
+    // Verify the connection actually works
+    await transporter.verify();
+    transporterReady = true;
+    logger.info('emailService.initMailDev', 'MailDev transporter initialized on localhost:1025');
+    return transporter;
+  } catch (err) {
+    logger.warn('emailService.initMailDev', `MailDev not available (${err.message}). Emails will be logged but not sent.`);
+    // Return a stub transporter that logs instead of sending
+    transporter = {
+      sendMail: async (opts) => {
+        logger.info('emailService.stub', 'Email not sent (MailDev unavailable)', { to: opts.to, subject: opts.subject });
+        return { messageId: 'stub-' + Date.now(), previewUrl: null };
+      },
+      verify: async () => true,
+    };
+    transporterReady = true;
+    return transporter;
+  }
 }
 
 /**
@@ -81,6 +99,15 @@ async function sendInvitationEmail(userEmail, token, orgName) {
 }
 
 /**
+ * Send vendor quote submission email with unique form link
+ */
+async function sendVendorQuoteEmail(vendorEmail, vendorName, prDetails, quoteFormUrl, expiresAt) {
+  const subject = `📋 Quote Request: ${prDetails.itemName} — Submit Your Proposal`;
+  const html = getVendorQuoteEmailTemplate(vendorName, prDetails, quoteFormUrl, expiresAt);
+  return sendEmail({ to: vendorEmail, subject, html });
+}
+
+/**
  * Send test email to verify setup
  */
 async function sendTestEmail() {
@@ -111,6 +138,7 @@ module.exports = {
   sendQuoteRequestEmail,
   sendPurchaseOrderEmail,
   sendInvitationEmail,
+  sendVendorQuoteEmail,
   sendTestEmail,
   getEmailPreviewUrl
 };

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
+const { createNotificationForRole } = require('../services/notificationService');
 const logger = require('../lib/logger');
 
 // GET /api/vendors - List all vendors
@@ -14,9 +15,9 @@ router.get('/', authenticate, async (req, res) => {
     const where = { organizationId: req.user.organizationId };
     if (req.query.search) {
       where.OR = [
-        { name: { contains: req.query.search } },
-        { email: { contains: req.query.search } },
-        { category: { contains: req.query.search } },
+        { name: { contains: req.query.search, mode: 'insensitive' } },
+        { email: { contains: req.query.search, mode: 'insensitive' } },
+        { category: { contains: req.query.search, mode: 'insensitive' } },
       ];
     }
     if (req.query.category) {
@@ -98,6 +99,17 @@ router.post('/', authenticate, authorize('officer', 'admin'), async (req, res) =
       }
     });
 
+    // Notify admins when a vendor is added
+    createNotificationForRole({
+      organizationId: req.user.organizationId,
+      role: 'admin',
+      type: 'vendor_added',
+      title: `🏢 New Vendor: ${name}`,
+      message: `${req.user.name} added "${name}" (${category}) to the vendor list`,
+      link: '/manage-vendors',
+      excludeUserId: req.user.id,
+    });
+
     res.status(201).json(vendor);
   } catch (err) {
     logger.error('vendors.create', err);
@@ -162,7 +174,7 @@ router.delete('/:id', authenticate, authorize('officer', 'admin'), async (req, r
   try {
     const existingVendor = await prisma.vendor.findUnique({
       where: { id: req.params.id },
-      include: { quotes: true },
+      include: { quotes: true, quoteRequests: true },
     });
 
     if (!existingVendor || existingVendor.organizationId !== req.user.organizationId) {
@@ -171,6 +183,13 @@ router.delete('/:id', authenticate, authorize('officer', 'admin'), async (req, r
 
     if (existingVendor.quotes.length > 0) {
       return res.status(400).json({ error: 'Cannot delete vendor with existing quotes. Remove quotes first.' });
+    }
+
+    // Delete associated quote requests first to avoid foreign key constraint
+    if (existingVendor.quoteRequests.length > 0) {
+      await prisma.quoteRequest.deleteMany({
+        where: { vendorId: req.params.id }
+      });
     }
 
     await prisma.vendor.delete({ where: { id: req.params.id } });
