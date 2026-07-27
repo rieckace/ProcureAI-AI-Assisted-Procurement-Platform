@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Button, Card, CardContent, Grid, Chip, Avatar
+  Box, Typography, Button, Card, CardContent, Grid, Chip, Avatar,
+  Menu, MenuItem, Divider
 } from '@mui/material';
 import {
-  SmartToy, Speed, Security, TrendingUp, ArrowForward,
-  ShoppingCart, Store, BarChart
+  SmartToy, Speed, Security, ArrowForward,
+  ShoppingCart, BarChart, Logout, Person
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import { getAvatarUrl } from '../utils/avatar';
 
 const features = [
   {
@@ -45,7 +48,8 @@ const steps = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const handleGetStarted = () => {
     if (user) {
@@ -56,8 +60,99 @@ export default function LandingPage() {
     }
   };
 
+  const handleLogout = () => {
+    setAnchorEl(null);
+    logout();
+    navigate('/login');
+  };
+
+  const topBarHeight = user ? 56 : 0;
+
   return (
-    <Box sx={{ minHeight: '100vh' }}>
+    <Box sx={{ minHeight: '100vh', pt: `${topBarHeight}px` }}>
+      {/* Top Bar for logged-in users */}
+      {user && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: 3,
+            py: 1.5,
+            bgcolor: 'background.paper',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box
+              sx={{
+                width: 28, height: 28, borderRadius: 0.7,
+                background: 'linear-gradient(135deg, #1a73e8, #1557b0)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '0.75rem' }}>P</Typography>
+            </Box>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: 'primary.main' }}>
+              ProcureAI
+            </Typography>
+            {user?.organizationName && (
+              <>
+                <Typography sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>|</Typography>
+                <Typography sx={{ fontWeight: 500, fontSize: '0.8rem', color: 'text.secondary' }}>
+                  {user.organizationName}
+                </Typography>
+              </>
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                const redirects = { admin: '/admin', officer: '/officer-dashboard', manager: '/manager-dashboard' };
+                navigate(redirects[user.role] || '/manager-dashboard');
+              }}
+              sx={{ borderRadius: 2, fontSize: '0.8rem', textTransform: 'none' }}
+            >
+              Dashboard
+            </Button>            <Avatar
+                    src={getAvatarUrl(user?.name, 30)}
+                    alt={user?.name || 'User avatar'}
+                    sx={{ width: 30, height: 30, cursor: 'pointer' }}
+                    onClick={(e) => setAnchorEl(e.currentTarget)}
+            />
+          </Box>
+
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={() => setAnchorEl(null)}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            PaperProps={{ sx: { borderRadius: 2, minWidth: 160 } }}
+          >
+            <MenuItem disabled sx={{ opacity: 0.7 }}>
+              <Typography variant="body2" color="text.secondary">{user?.email}</Typography>
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile'); }}>
+              <Person sx={{ mr: 1.5, fontSize: 18 }} /> Profile
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleLogout}>
+              <Logout sx={{ mr: 1.5, fontSize: 18 }} /> Sign Out
+            </MenuItem>
+          </Menu>
+        </Box>
+      )}
       {/* Hero Section */}
       <Box
         sx={{

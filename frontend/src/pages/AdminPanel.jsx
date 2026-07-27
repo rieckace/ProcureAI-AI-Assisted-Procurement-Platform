@@ -78,19 +78,42 @@ export default function AdminPanel() {
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-        Admin Panel
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Manage users, send invitations, and test email functionality
-      </Typography>
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
+        <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+          Admin Panel
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Manage users, send invitations, and test email functionality
+        </Typography>
+      </Box>
 
       {/* Invite User */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <PersonAdd color="primary" />
-            <Typography variant="h6">Invite New User</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              backgroundColor: 'primary.main',
+              color: 'white',
+            }}>
+              <PersonAdd fontSize="small" />
+            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Invite New User</Typography>
           </Box>
 
           {inviteError && (
@@ -169,14 +192,25 @@ export default function AdminPanel() {
       </Card>
 
       {/* Users Table */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, pb: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <People color="primary" />
-              <Typography variant="h6">Users</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2.5, pb: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                borderRadius: 2,
+                backgroundColor: 'primary.main',
+                color: 'white',
+              }}>
+                <People fontSize="small" />
+              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>Users</Typography>
             </Box>
-            <Button size="small" startIcon={<Refresh />} onClick={fetchUsers} sx={{ borderRadius: 2 }}>
+            <Button size="small" startIcon={<Refresh />} onClick={fetchUsers} sx={{ borderRadius: 2, textTransform: 'none' }}>
               Refresh
             </Button>
           </Box>

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback } from 'react';
-import { Snackbar, Alert } from '@mui/material';
+import { Snackbar, Alert, Button, Box } from '@mui/material';
 
 const ToastContext = createContext(null);
 
@@ -8,10 +8,10 @@ export function useToast() {
 }
 
 export function ToastProvider({ children }) {
-  const [toast, setToast] = useState({ open: false, message: '', severity: 'success' });
+  const [toast, setToast] = useState({ open: false, message: '', severity: 'success', action: null });
 
-  const showToast = useCallback((message, severity = 'success') => {
-    setToast({ open: true, message, severity });
+  const showToast = useCallback((message, severity = 'success', action = null) => {
+    setToast({ open: true, message, severity, action });
   }, []);
 
   const handleClose = useCallback((_, reason) => {
@@ -28,7 +28,40 @@ export function ToastProvider({ children }) {
         onClose={handleClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={handleClose} severity={toast.severity} sx={{ borderRadius: 2, minWidth: 280 }} variant="filled">
+        <Alert
+          onClose={handleClose}
+          severity={toast.severity}
+          variant="filled"
+          sx={{ borderRadius: 2, minWidth: 280, alignItems: 'center' }}
+          action={
+            toast.action ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                {toast.action.label && (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    variant="outlined"
+                    sx={{
+                      borderColor: 'rgba(255,255,255,0.5)',
+                      color: 'inherit',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      '&:hover': { borderColor: 'rgba(255,255,255,0.8)', bgcolor: 'rgba(255,255,255,0.1)' },
+                    }}
+                    onClick={() => {
+                      toast.action.onClick();
+                      setToast(p => ({ ...p, open: false }));
+                    }}
+                  >
+                    {toast.action.label}
+                  </Button>
+                )}
+              </Box>
+            ) : (
+              undefined
+            )
+          }
+        >
           {toast.message}
         </Alert>
       </Snackbar>

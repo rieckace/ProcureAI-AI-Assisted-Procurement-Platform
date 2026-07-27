@@ -5,45 +5,45 @@ import { Lightbulb, Close } from '@mui/icons-material';
 
 const TIPS = {
   '/manager-dashboard': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
+    { text: '💡 Press **⌘⇧K** to open the global search', action: 'shortcut' },
     { text: '💡 Click **New Request** to create a purchase request', action: 'navigate' },
-    { text: '💡 Use the search bar to find specific requests', action: 'search' },
   ],
   '/officer-dashboard': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
+    { text: '💡 Press **⌘⇧K** to open the global search', action: 'shortcut' },
     { text: '💡 Drag requests between Kanban columns to update status', action: 'drag' },
-    { text: '💡 Click **AI Recommendation** to get vendor scoring', action: 'ai' },
   ],
   '/new-request': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
     { text: '💡 Include a clear justification to speed up approval', action: 'justify' },
     { text: '💡 Set urgency correctly — critical items get priority', action: 'urgency' },
   ],
   '/analytics': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
     { text: '💡 Hover over charts for detailed data points', action: 'hover' },
-    { text: '💡 Use filters to narrow down time periods', action: 'filter' },
+    { text: '💡 Switch between **Overview**, **Requests**, and **Vendors** tabs', action: 'filter' },
   ],
   '/manage-vendors': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
     { text: '💡 Keep vendor ratings and delivery stats up to date', action: 'update' },
     { text: '💡 Categorize vendors for easier filtering', action: 'categorize' },
   ],
   '/admin': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
     { text: '💡 Use **Invite User** to add team members', action: 'invite' },
     { text: '💡 Procura can help you invite users — just ask!', action: 'procura' },
   ],
   '/activity-log': [
-    { text: '💡 Press **Cmd+K** to open Procura instantly', action: 'shortcut' },
+    { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
     { text: '💡 Activity logs track all changes in your organization', action: 'track' },
   ],
 };
 
 const GLOBAL_TIPS = [
-  { text: '💡 Press **Cmd+K** to open Procura from anywhere', action: 'shortcut' },
+  { text: '💡 Press **Cmd+K** to ask Procura AI assistant', action: 'shortcut' },
+  { text: '💡 Press **⌘⇧K** to open the global search', action: 'shortcut' },
   { text: '💡 Ask Procura: "Show my pending requests"', action: 'procura' },
-  { text: '💡 Ask Procura: "How do I create a PR?"', action: 'procura' },
 ];
 
 export default function ProcuraTips() {
@@ -104,7 +104,7 @@ export default function ProcuraTips() {
           position: 'fixed',
           bottom: 90,
           right: 24,
-          zIndex: 1100,
+          zIndex: 1050, // Below ChatWidget (1200) and GlobalSearch (1300)
           maxWidth: 320,
           bgcolor: (theme) => theme.palette.mode === 'dark'
             ? 'rgba(26, 35, 53, 0.95)'

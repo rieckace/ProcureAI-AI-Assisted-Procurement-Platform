@@ -22,6 +22,8 @@ const Analytics = lazy(() => import('./pages/Analytics'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const AvatarStudio = lazy(() => import('./pages/AvatarStudio'));
 const Profile = lazy(() => import('./pages/Profile'));
+const VendorQuoteForm = lazy(() => import('./pages/VendorQuoteForm'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 function PageLoader() {
   return (
@@ -53,6 +55,7 @@ function AppRoutes() {
       <Route path="/login" element={<LazyPage Component={Login} />} />
       <Route path="/accept-invite/:token" element={<LazyPage Component={AcceptInvite} />} />
       <Route path="/" element={<LazyPage Component={LandingPage} />} />
+      <Route path="/vendor-quote/:token" element={<LazyPage Component={VendorQuoteForm} />} />
 
       {/* Protected routes with Layout */}
       <Route
@@ -108,7 +111,7 @@ function AppRoutes() {
         <Route path="/profile" element={<LazyPage Component={Profile} />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<LazyPage Component={NotFound} />} />
     </Routes>
   );
 }

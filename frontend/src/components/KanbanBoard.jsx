@@ -10,7 +10,7 @@ import { URGENCY_COLORS } from '../constants';
 import { useToast } from '../context/ToastContext';
 import { getAvatarUrl } from '../utils/avatar';
 
-const COLUMN_ORDER = ['pending', 'quoted', 'ordered', 'delivered'];
+const COLUMN_ORDER = ['pending', 'quoted', 'ordered', 'delivered', 'rejected'];
 
 function getColumnColors(theme, status) {
   const colorMap = {
@@ -18,6 +18,7 @@ function getColumnColors(theme, status) {
     quoted: { color: theme.palette.info.main, bg: theme.palette.info.main },
     ordered: { color: theme.palette.primary.main, bg: theme.palette.primary.main },
     delivered: { color: theme.palette.success.main, bg: theme.palette.success.main },
+    rejected: { color: theme.palette.error.main, bg: theme.palette.error.main },
   };
   return colorMap[status] || { color: theme.palette.text.secondary, bg: theme.palette.text.secondary };
 }
@@ -69,6 +70,7 @@ const MemoizedPRCard = memo(function PRCard({ pr, index, readOnly, theme }) {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
               <Avatar
                 src={getAvatarUrl(pr.user?.name, 18)}
+                alt={pr.user?.name || 'Requester'}
                 sx={{ width: 18, height: 18, fontSize: '0.6rem' }}
               />
               <Typography variant="caption" color="text.secondary">
@@ -169,7 +171,18 @@ export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
     // Try the status update
     try {
       await api.patch(`/purchase-requests/${draggableId}/status`, { status: newStatus });
-      showToast(`Status updated to "${newStatus}"`, 'success');
+      showToast(`Status updated to "${newStatus}"`, 'success', {
+        label: 'Undo',
+        onClick: async () => {
+          try {
+            await api.patch(`/purchase-requests/${draggableId}/status`, { status: source.droppableId });
+            showToast('Status reverted', 'info');
+            if (onStatusChange) onStatusChange();
+          } catch {
+            showToast('Failed to undo', 'error');
+          }
+        },
+      });
       if (onStatusChange) onStatusChange();
     } catch (err) {
       // Revert optimistic update on failure
@@ -199,7 +212,7 @@ export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
           {COLUMN_ORDER.map((status) => {
             const col = colColors[status];
             const items = columns[status] || [];
-            const labelMap = { pending: 'Pending', quoted: 'Quoted', ordered: 'Ordered', delivered: 'Delivered' };
+            const labelMap = { pending: 'Pending', quoted: 'Quoted', ordered: 'Ordered', delivered: 'Delivered', rejected: 'Cancelled' };
             return (
               <Box
                 key={status}

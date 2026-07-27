@@ -10,6 +10,7 @@ import {
 } from '@mui/icons-material';
 import api from '../api';
 import { getAvatarUrl } from '../utils/avatar';
+import { timeAgo } from '../utils/timeAgo';
 
 const actionConfig = {
   created: { icon: <Add fontSize="small" />, color: 'success.main', bg: 'rgba(46,125,50,0.12)', label: 'Created' },
@@ -20,6 +21,10 @@ const actionConfig = {
   deleted_quote: { icon: <Delete fontSize="small" />, color: 'error.main', bg: 'rgba(234,67,53,0.12)', label: 'Quote Deleted' },
   issued_po: { icon: <CheckCircle fontSize="small" />, color: 'success.main', bg: 'rgba(46,125,50,0.12)', label: 'PO Issued' },
   invited_user: { icon: <PersonAdd fontSize="small" />, color: 'secondary.main', bg: 'rgba(147,52,230,0.12)', label: 'User Invited' },
+  sent_quote_request: { icon: <Email fontSize="small" />, color: 'info.main', bg: 'rgba(33,150,243,0.12)', label: 'Quote Request Sent' },
+  sent_quote_requests: { icon: <Email fontSize="small" />, color: 'info.main', bg: 'rgba(33,150,243,0.12)', label: 'Quote Requests Sent' },
+  resent_quote_request: { icon: <Email fontSize="small" />, color: 'info.main', bg: 'rgba(33,150,243,0.12)', label: 'Quote Request Resent' },
+  cancelled_quote_request: { icon: <Cancel fontSize="small" />, color: 'error.main', bg: 'rgba(234,67,53,0.12)', label: 'Quote Request Cancelled' },
 };
 
 export default function ActivityLog() {
@@ -50,21 +55,6 @@ export default function ActivityLog() {
     return () => { cancelled = true; };
   }, [page]);
 
-  const formatTime = (date) => {
-    const d = new Date(date);
-    const now = new Date();
-    const diffMs = now - d;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return d.toLocaleDateString();
-  };
-
   // Auto-dismiss errors
   useEffect(() => {
     if (!error) return;
@@ -93,14 +83,38 @@ export default function ActivityLog() {
 
   return (
     <Box sx={{ animation: 'fadeInUp 0.35s ease' }}>
-      <Button startIcon={<ArrowBack />} onClick={() => navigate(-1)} sx={{ mb: 2, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}>
+      <Button startIcon={<ArrowBack />} onClick={() => navigate(-1)} sx={{ mb: 2, color: 'text.secondary', textTransform: 'none', '&:hover': { bgcolor: 'action.hover' } }}>
         Back
       </Button>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <History sx={{ fontSize: 28, color: 'primary.main' }} />
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2,
+      }}>
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 44,
+          height: 44,
+          borderRadius: 2,
+          backgroundColor: 'primary.main',
+          color: 'white',
+        }}>
+          <History />
+        </Box>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
             Activity Log
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -140,7 +154,6 @@ export default function ActivityLog() {
                     p: 2.5,
                     borderBottom: index < logs.length - 1 ? '1px solid' : 'none',
                     borderColor: 'divider',
-                    '&:hover': { bgcolor: 'action.hover' },
                     transition: 'background-color 0.15s, transform 0.15s ease',
                     '&:hover': { bgcolor: 'action.hover', transform: 'translateX(4px)' },
                   }}
@@ -148,9 +161,11 @@ export default function ActivityLog() {
                   <Box sx={{ position: 'relative', flexShrink: 0 }}>
                     <Avatar
                       src={getAvatarUrl(log.user?.name, 36)}
+                      alt={log.user?.name || 'User avatar'}
                       sx={{ width: 36, height: 36 }}
                     />
                     <Avatar
+                      alt="Action icon"
                       sx={{
                         position: 'absolute',
                         bottom: -4,
@@ -188,7 +203,7 @@ export default function ActivityLog() {
                       {log.details}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                      {formatTime(log.createdAt)} · {log.user?.role}
+                      {timeAgo(log.createdAt)} · {log.user?.role}
                     </Typography>
                   </Box>
                 </Box>

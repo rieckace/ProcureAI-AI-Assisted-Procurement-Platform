@@ -20,6 +20,8 @@ import ChatWidget from './ChatWidget';
 import ProcuraTips from './ProcuraTips';
 import NotificationBell from './NotificationBell';
 import ScrollToTop from './ScrollToTop';
+import GlobalSearch from './GlobalSearch';
+import KeyboardShortcuts from './KeyboardShortcuts';
 import { getAvatarUrl } from '../utils/avatar';
 
 const DRAWER_EXPANDED = 220;
@@ -55,9 +57,10 @@ export default function Layout() {
   const spinTimerRef = useRef(null);
   const navBufferRef = useRef('');
 
-  // Update page title
+  // Update page title and auto-scroll to top on navigation
   useEffect(() => {
     updatePageTitle(location.pathname);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.pathname]);
 
   useEffect(() => {
@@ -104,12 +107,6 @@ export default function Layout() {
       if (e.key === 'r' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         window.location.reload();
-        return;
-      }
-      if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        setShortcutHint('N: New Request • R: Refresh • B: Toggle Sidebar');
-        setTimeout(() => setShortcutHint(''), 3000);
         return;
       }
       if (e.key === 'b' && !e.metaKey && !e.ctrlKey) {
@@ -220,19 +217,15 @@ export default function Layout() {
             : 'linear-gradient(90deg, #1a73e8 0%, #1557b0 50%, #1a73e8 100%)',
           flexShrink: 0,
         }}
-      />
-
-      {/* Logo Area */}
+      />          {/* Logo Area — ProcureAI brand only, premium look */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: isCollapsed ? 'center' : 'space-between',
           px: isCollapsed ? 0 : 2,
-          height: 60,
-          minHeight: 60,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
+          height: 68,
+          minHeight: 68,
         }}
       >
         {!isCollapsed && (
@@ -242,9 +235,9 @@ export default function Layout() {
           >
             <Box
               sx={{
-                width: 30,
-                height: 30,
-                borderRadius: 1,
+                width: 36,
+                height: 36,
+                borderRadius: 1.5,
                 background: (theme) => theme.palette.mode === 'dark'
                   ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
                   : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
@@ -252,30 +245,42 @@ export default function Layout() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                boxShadow: '0 2px 6px rgba(26,115,232,0.3)',
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 2px 10px rgba(138,180,248,0.3)'
+                  : '0 2px 10px rgba(26,115,232,0.35)',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  boxShadow: (theme) => theme.palette.mode === 'dark'
+                    ? '0 4px 16px rgba(138,180,248,0.4)'
+                    : '0 4px 16px rgba(26,115,232,0.45)',
+                },
               }}
             >
-              <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '0.85rem', lineHeight: 1 }}>P</Typography>
+              <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>P</Typography>
             </Box>
             <Box sx={{ minWidth: 0 }}>
+              {/* ProcureAI — the product name, bold and prominent */}
               <Typography
                 noWrap
                 sx={{
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
+                  fontWeight: 800,
+                  fontSize: '1.05rem',
                   letterSpacing: '-0.02em',
                   lineHeight: 1.2,
-                  color: 'text.primary',
+                  color: (theme) => theme.palette.mode === 'dark' ? '#8ab4f8' : 'primary.main',
+                  background: (theme) => theme.palette.mode === 'dark'
+                    ? 'linear-gradient(135deg, #8ab4f8, #aecbfa)'
+                    : 'linear-gradient(135deg, #1a73e8, #1557b0)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
                 }}
               >
-                {user?.organizationName
-                  ? user.organizationName.length > 16
-                    ? user.organizationName.slice(0, 16) + '…'
-                    : user.organizationName
-                  : 'ProcureAI'}
+                ProcureAI
               </Typography>
-              <Typography noWrap sx={{ fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.2 }}>
-                Procurement Suite
+              <Typography noWrap sx={{ fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.1, letterSpacing: '0.02em' }}>
+                AI Procurement System
               </Typography>
             </Box>
           </Box>
@@ -283,9 +288,9 @@ export default function Layout() {
         {isCollapsed && (
           <Box
             sx={{
-              width: 32,
-              height: 32,
-              borderRadius: 1,
+              width: 36,
+              height: 36,
+              borderRadius: 1.5,
               background: (theme) => theme.palette.mode === 'dark'
                 ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
                 : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
@@ -293,11 +298,13 @@ export default function Layout() {
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(26,115,232,0.3)',
+              boxShadow: (theme) => theme.palette.mode === 'dark'
+                ? '0 2px 10px rgba(138,180,248,0.3)'
+                : '0 2px 10px rgba(26,115,232,0.35)',
             }}
             onClick={() => navigate('/')}
           >
-            <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '0.9rem', lineHeight: 1 }}>P</Typography>
+            <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>P</Typography>
           </Box>
         )}
         {!isCollapsed && (
@@ -317,6 +324,14 @@ export default function Layout() {
           </Tooltip>
         )}
       </Box>
+
+      {/* Subtle divider line under logo */}
+      <Box sx={{
+        mx: 1.5,
+        height: '1px',
+        background: (theme) => `linear-gradient(90deg, ${theme.palette.divider}, transparent)`,
+        mb: 0.5,
+      }} />
 
       {/* Section Label */}
       {!isCollapsed && (
@@ -434,7 +449,7 @@ export default function Layout() {
           </Tooltip>
           <Tooltip title={user?.name || 'User'} arrow placement="right">
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
-              <Avatar src={getAvatarUrl(user?.name, 26)} sx={{ width: 26, height: 26 }} />
+              <Avatar src={getAvatarUrl(user?.name, 26)} alt={user?.name || 'User avatar'} sx={{ width: 26, height: 26 }} />
             </IconButton>
           </Tooltip>
         </Box>
@@ -455,7 +470,7 @@ export default function Layout() {
             }}
             onClick={(e) => setAnchorEl(e.currentTarget)}
           >
-            <Avatar src={getAvatarUrl(user?.name, 28)} sx={{ width: 28, height: 28 }} />
+            <Avatar src={getAvatarUrl(user?.name, 28)} alt={user?.name || 'User avatar'} sx={{ width: 28, height: 28 }} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography noWrap sx={{ fontWeight: 600, fontSize: '0.8rem', lineHeight: 1.3 }}>
                 {user?.name}
@@ -567,12 +582,31 @@ export default function Layout() {
             {isCollapsed ? <ChevronRight fontSize="small" /> : <ChevronLeft fontSize="small" />}
           </IconButton>
 
-          {/* Page title + breadcrumbs — centered with flex */}
+          {/* Page title + breadcrumbs — clean centered layout */}
           <Box sx={{ flex: 1, textAlign: 'center' }}>
+            {/* Organization name — primary in header */}
             <Typography
-              variant="h6"
               noWrap
-              sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary', letterSpacing: '-0.01em', lineHeight: 1.2 }}
+              sx={{
+                fontWeight: 700,
+                fontSize: { xs: '0.85rem', sm: '0.95rem', md: '1.05rem' },
+                color: 'text.primary',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.3,
+              }}
+            >
+              {user?.organizationName || getPageTitle()}
+            </Typography>
+            {/* Page title — smaller, secondary */}
+            <Typography
+              noWrap
+              sx={{
+                fontWeight: 500,
+                fontSize: { xs: '0.65rem', sm: '0.72rem' },
+                color: 'text.disabled',
+                lineHeight: 1.2,
+                mt: -0.1,
+              }}
             >
               {getPageTitle()}
             </Typography>
@@ -631,6 +665,7 @@ export default function Layout() {
               >
                 <Avatar
                   src={getAvatarUrl(user?.name, 28)}
+                  alt={user?.name || 'User avatar'}
                   sx={{ width: 28, height: 28 }}
                 />
               </IconButton>
@@ -669,11 +704,26 @@ export default function Layout() {
         >
           {/* Only render user menu in desktop drawer to avoid duplicates */}
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper', overflow: 'hidden' }}>
-            {/* Logo Area */}
-            <Box sx={{ display: 'flex', alignItems: 'center', px: 2, height: 56, borderBottom: '1px solid', borderColor: 'divider', minHeight: 56 }}>
-              <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }} onClick={() => navigate('/')}>
-                {user?.organizationName ? (user.organizationName.length > 14 ? user.organizationName.slice(0, 14) + '…' : user.organizationName) : 'ProcureAI'}
-              </Typography>
+            {/* Logo Area — Mobile: ProcureAI only */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, height: 56, borderBottom: '1px solid', borderColor: 'divider', minHeight: 56 }}>
+              <Box
+                sx={{
+                  width: 28, height: 28, borderRadius: 0.8,
+                  background: 'linear-gradient(135deg, #1a73e8, #1557b0)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '0.8rem' }}>P</Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.9rem', lineHeight: 1.2 }}>
+                  ProcureAI
+                </Typography>
+                <Typography sx={{ fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.2 }}>
+                  AI Procurement System
+                </Typography>
+              </Box>
             </Box>
             <List sx={{ flex: 1, px: 1, pt: 0.5, overflow: 'auto' }}>
               {navItems.map((item) => (
@@ -704,7 +754,7 @@ export default function Layout() {
                 sx={{ display: 'flex', alignItems: 'center', gap: 1.2, cursor: 'pointer', p: 0.6, '&:hover': { bgcolor: 'action.hover' } }}
                 onClick={(e) => { setAnchorEl(e.currentTarget); setMobileOpen(false); }}
               >
-                <Avatar src={getAvatarUrl(user?.name, 28)} sx={{ width: 28, height: 28 }} />
+                <Avatar src={getAvatarUrl(user?.name, 28)} alt={user?.name || 'User avatar'} sx={{ width: 28, height: 28 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={600} noWrap sx={{ lineHeight: 1.2, fontSize: '0.8rem' }}>{user?.name}</Typography>
                   <Chip label={user?.role} size="small" sx={{ height: 16, fontSize: '0.6rem', borderRadius: 0, backgroundColor: ROLE_COLORS[user?.role]?.bg || 'action.hover', color: ROLE_COLORS[user?.role]?.color || 'text.primary', mt: 0.1 }} />
@@ -764,6 +814,7 @@ export default function Layout() {
       {/* Main Content */}
       <Box
         component="main"
+        id="main-content"
         sx={{
           flexGrow: 1,
           p: 3,
@@ -807,7 +858,9 @@ export default function Layout() {
       </Menu>
 
       {/* Floating elements */}
+      <GlobalSearch />
       <ChatWidget />
+      <KeyboardShortcuts />
       {shortcutHint && (
         <Box sx={{
           position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
@@ -820,6 +873,29 @@ export default function Layout() {
       )}
       <ProcuraTips />
       <ScrollToTop />
+      <Box
+        id="skip-to-content"
+        component="a"
+        href="#main-content"
+        sx={{
+          position: 'fixed',
+          top: -100,
+          left: 16,
+          zIndex: 9999,
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          p: 1.5,
+          borderRadius: 1,
+          fontWeight: 600,
+          fontSize: '0.8rem',
+          textDecoration: 'none',
+          '&:focus': {
+            top: 16,
+          },
+        }}
+      >
+        Skip to main content
+      </Box>
     </Box>
   );
 }

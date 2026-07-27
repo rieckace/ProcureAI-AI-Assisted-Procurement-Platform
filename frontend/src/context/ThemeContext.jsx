@@ -294,14 +294,26 @@ function buildTheme(mode) {
       },
       MuiAlert: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             borderRadius: 6,
             animation: 'slideUp 0.3s ease',
-          },
-          standardError: { backgroundColor: '#fce8e6', color: '#c5221f' },
-          standardSuccess: { backgroundColor: '#e6f4ea', color: '#1e8e3e' },
-          standardWarning: { backgroundColor: '#fef7e0', color: '#e37400' },
-          standardInfo: { backgroundColor: '#e8f0fe', color: '#1a73e8' },
+          }),
+          standardError: ({ theme }) => ({
+            backgroundColor: theme.palette.mode === 'dark' ? '#3c2121' : '#fce8e6',
+            color: theme.palette.mode === 'dark' ? '#f28b82' : '#c5221f',
+          }),
+          standardSuccess: ({ theme }) => ({
+            backgroundColor: theme.palette.mode === 'dark' ? '#1d3525' : '#e6f4ea',
+            color: theme.palette.mode === 'dark' ? '#81c995' : '#1e8e3e',
+          }),
+          standardWarning: ({ theme }) => ({
+            backgroundColor: theme.palette.mode === 'dark' ? '#352f1c' : '#fef7e0',
+            color: theme.palette.mode === 'dark' ? '#fdd663' : '#e37400',
+          }),
+          standardInfo: ({ theme }) => ({
+            backgroundColor: theme.palette.mode === 'dark' ? '#1a2433' : '#e8f0fe',
+            color: theme.palette.mode === 'dark' ? '#8ab4f8' : '#1a73e8',
+          }),
         },
       },
       MuiSnackbar: {

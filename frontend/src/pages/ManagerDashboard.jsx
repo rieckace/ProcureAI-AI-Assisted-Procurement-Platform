@@ -13,6 +13,7 @@ import StatusChip from '../components/StatusChip';
 import KanbanBoard from '../components/KanbanBoard';
 import UrgencyFilter from '../components/UrgencyFilter';
 import { DashboardSkeleton } from '../components/Skeletons';
+import AnimatedCounter from '../components/AnimatedCounter';
 import { URGENCY_COLORS } from '../constants';
 import { exportToCsv } from '../utils/exportCsv';
 
@@ -69,6 +70,12 @@ export default function ManagerDashboard() {
       setInitialLoading(false);
     }
   }, [page, statusFilter, urgencyFilter, debouncedSearch, dateFrom, dateTo]);
+
+  const handleRetry = () => {
+    setError('');
+    if (viewMode === 'kanban') fetchAllForKanban();
+    else fetchRequests();
+  };
 
   const fetchAllForKanban = useCallback(async () => {
     setKanbanLoading(true);
@@ -152,12 +159,13 @@ export default function ManagerDashboard() {
   };
 
   const summaryStats = useMemo(() => {
-    const counts = { pending: 0, quoted: 0, delivered: 0 };
+    const counts = { pending: 0, quoted: 0, ordered: 0, delivered: 0 };
     prs.forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
     return [
       { label: 'Total Requests', count: prs.length, color: 'primary.main', bg: 'rgba(26,115,232,0.12)' },
       { label: 'Pending', count: counts.pending, color: 'warning.main', bg: 'rgba(249,171,0,0.12)' },
       { label: 'Quoted', count: counts.quoted, color: 'info.main', bg: 'rgba(33,150,243,0.12)' },
+      { label: 'Ordered', count: counts.ordered, color: 'primary.main', bg: 'rgba(26,115,232,0.12)' },
       { label: 'Delivered', count: counts.delivered, color: 'success.main', bg: 'rgba(46,125,50,0.12)' },
     ];
   }, [prs]);
@@ -178,44 +186,68 @@ export default function ManagerDashboard() {
   return (
     <Box sx={{ position: 'relative', animation: 'fadeInUp 0.35s ease' }}>
       {isLoading && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }} />}
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-            My Purchase Requests
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            View and manage all your procurement requests
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={(e, v) => v && setViewMode(v)}
-            size="small"
-            sx={{ '& .MuiToggleButton-root': { px: 1.5 } }}
-          >
-            <ToggleButton value="kanban" aria-label="Kanban view">
-              <ViewKanban fontSize="small" />
-            </ToggleButton>
-            <ToggleButton value="table" aria-label="Table view">
-              <TableChart fontSize="small" />
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => navigate('/new-request')}
-            sx={{ borderRadius: 2, py: 1.2, px: 3 }}
-          >
-            New Request
-          </Button>
+
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+              My Purchase Requests
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              View and manage all your procurement requests
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(e, v) => v && setViewMode(v)}
+              size="small"
+              sx={{
+                '& .MuiToggleButton-root': { px: 1.5, borderRadius: '8px !important', border: '1px solid', borderColor: 'divider' },
+              }}
+            >
+              <ToggleButton value="kanban" aria-label="Kanban view">
+                <ViewKanban fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="table" aria-label="Table view">
+                <TableChart fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => navigate('/new-request')}
+              sx={{ borderRadius: 2, py: 1.2, px: 3, textTransform: 'none', fontWeight: 600 }}
+            >
+              New Request
+            </Button>
+          </Box>
         </Box>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>
+        <Alert
+          severity="error"
+          sx={{ mb: 2, borderRadius: 2 }}
+          action={
+            <Button size="small" color="inherit" onClick={handleRetry}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       )}
 
       {/* Filters */}
@@ -267,7 +299,7 @@ export default function ManagerDashboard() {
               label="From"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+              InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 150 }}
             />
             <TextField
@@ -276,7 +308,7 @@ export default function ManagerDashboard() {
               label="To"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+              InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 150 }}
             />
             {/* Quick date filters */}
@@ -342,14 +374,21 @@ export default function ManagerDashboard() {
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', animation: 'fadeInUp 0.3s ease' }}>
             {summaryStats.map((stat) => (
               <Tooltip key={stat.label} title={`${stat.count} ${stat.label.toLowerCase()} request(s)`} arrow>
-                <Card sx={{ flex: 1, minWidth: 140 }}>
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: stat.color, mb: 0.5 }}>
-                      {stat.count}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                <Card sx={{
+                  flex: 1, minWidth: 130,
+                  background: (theme) => theme.palette.mode === 'dark'
+                    ? `linear-gradient(135deg, ${stat.bg} 0%, rgba(0,0,0,0.2) 100%)`
+                    : `linear-gradient(135deg, ${stat.bg} 0%, rgba(255,255,255,0.8) 100%)`,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                  '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 },
+                }}>
+                  <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+                    <Typography variant="body2" color="text.secondary" fontWeight={500} sx={{ mb: 0.5, fontSize: '0.8rem' }}>
                       {stat.label}
                     </Typography>
+                    <AnimatedCounter value={stat.count} variant="h4" color={stat.color} />
                   </CardContent>
                 </Card>
               </Tooltip>

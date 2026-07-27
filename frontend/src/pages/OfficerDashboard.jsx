@@ -1,24 +1,28 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
   Box, Typography, Button, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Alert, IconButton,
   Tooltip, TextField, MenuItem, InputAdornment, Pagination, ToggleButton,
-  ToggleButtonGroup, LinearProgress, useMediaQuery, useTheme, Avatar
+  ToggleButtonGroup, LinearProgress, useMediaQuery, useTheme, Avatar, Menu, ListItemIcon, ListItemText,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
-import { Visibility, Search, Store, ViewKanban, TableChart, Download, FilterAltOff, Inbox, SearchOff, Today, DateRange } from '@mui/icons-material';
+import { Visibility, Search, Store, ViewKanban, TableChart, Download, FilterAltOff, Inbox, SearchOff, Today, DateRange, SaveAlt, Bookmark, CheckCircle, HourglassEmpty, FormatQuote, ArrowDropDown, Cancel as CancelIcon } from '@mui/icons-material';
 import api from '../api';
 import { useToast } from '../context/ToastContext';
 import StatusChip from '../components/StatusChip';
 import KanbanBoard from '../components/KanbanBoard';
 import UrgencyFilter from '../components/UrgencyFilter';
 import { DashboardSkeleton } from '../components/Skeletons';
+import AnimatedCounter from '../components/AnimatedCounter';
 import { URGENCY_COLORS } from '../constants';
 import { exportToCsv } from '../utils/exportCsv';
 import { getAvatarUrl } from '../utils/avatar';
 
 export default function OfficerDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const theme = useTheme();
   const { showToast } = useToast();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -39,6 +43,74 @@ export default function OfficerDashboard() {
   const [searching, setSearching] = useState(false);
   const searchInputRef = useRef(null);
 
+  // Saved Filter Presets
+  const [savedPresets, setSavedPresets] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('filter_presets') || '[]'); }
+    catch { return []; }
+  });
+  const [presetName, setPresetName] = useState('');
+  const [presetDialog, setPresetDialog] = useState(false);
+  const [statusMenuAnchor, setStatusMenuAnchor] = useState(null);
+  const [statusMenuTarget, setStatusMenuTarget] = useState(null);
+  const [statusChanging, setStatusChanging] = useState(false);
+
+  const handleOpenPresetDialog = () => {
+    setPresetName('');
+    setPresetDialog(true);
+  };
+
+  const handleSavePreset = () => {
+    const name = presetName.trim();
+    if (!name) return;
+    const preset = {
+      id: Date.now(),
+      name,
+      statusFilter,
+      urgencyFilter,
+      dateFrom,
+      dateTo,
+      search: debouncedSearch,
+    };
+    const updated = [...savedPresets, preset].slice(-10);
+    setSavedPresets(updated);
+    localStorage.setItem('filter_presets', JSON.stringify(updated));
+    setPresetDialog(false);
+    showToast(`Filter preset "${name}" saved`, 'success');
+  };
+
+  const applyPreset = (preset) => {
+    setStatusFilter(preset.statusFilter || 'all');
+    setUrgencyFilter(preset.urgencyFilter || 'all');
+    setDateFrom(preset.dateFrom || '');
+    setDateTo(preset.dateTo || '');
+    setSearch(preset.search || '');
+    setDebouncedSearch(preset.search || '');
+    setPage(1);
+    showToast(`Applied preset "${preset.name}"`, 'info');
+  };
+
+  const deletePreset = (presetId) => {
+    const updated = savedPresets.filter(p => p.id !== presetId);
+    setSavedPresets(updated);
+    localStorage.setItem('filter_presets', JSON.stringify(updated));
+  };
+
+  const handleQuickStatusChange = async (prId, newStatus) => {
+    setStatusChanging(true);
+    try {
+      await api.patch(`/purchase-requests/${prId}/status`, { status: newStatus });
+      showToast(`Status updated to ${newStatus}`, 'success');
+      if (viewMode === 'kanban') fetchAllForKanban();
+      else fetchRequests();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update status', 'error');
+    } finally {
+      setStatusChanging(false);
+      setStatusMenuAnchor(null);
+      setStatusMenuTarget(null);
+    }
+  };
+
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
@@ -58,6 +130,12 @@ export default function OfficerDashboard() {
       setInitialLoading(false);
     }
   }, [page, statusFilter, urgencyFilter, debouncedSearch, dateFrom, dateTo]);
+
+  const handleRetry = () => {
+    setError('');
+    if (viewMode === 'kanban') fetchAllForKanban();
+    else fetchRequests();
+  };
 
   const fetchAllForKanban = useCallback(async () => {
     setKanbanLoading(true);
@@ -167,43 +245,68 @@ export default function OfficerDashboard() {
   return (
     <Box sx={{ position: 'relative', animation: 'fadeInUp 0.35s ease' }}>
       {isLoading && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }} />}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-            All Purchase Requests
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ animation: 'fadeInUp 0.3s ease' }}>
-            Review and manage procurement requests from all managers
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={(e, v) => v && setViewMode(v)}
-            size="small"
-            sx={{ '& .MuiToggleButton-root': { px: 1.5 } }}
-          >
-            <ToggleButton value="kanban" aria-label="Kanban view">
-              <ViewKanban fontSize="small" />
-            </ToggleButton>
-            <ToggleButton value="table" aria-label="Table view">
-              <TableChart fontSize="small" />
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <Button
-            variant="outlined"
-            startIcon={<Store />}
-            onClick={() => navigate('/manage-vendors')}
-            sx={{ borderRadius: 2 }}
-          >
-            Manage Vendors
-          </Button>
+
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+              All Purchase Requests
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Review and manage procurement requests from all managers
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(e, v) => v && setViewMode(v)}
+              size="small"
+              sx={{
+                '& .MuiToggleButton-root': { px: 1.5, borderRadius: '8px !important', border: '1px solid', borderColor: 'divider' },
+              }}
+            >
+              <ToggleButton value="kanban" aria-label="Kanban view">
+                <ViewKanban fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="table" aria-label="Table view">
+                <TableChart fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Button
+              variant="contained"
+              startIcon={<Store />}
+              onClick={() => navigate('/manage-vendors')}
+              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+            >
+              Manage Vendors
+            </Button>
+          </Box>
         </Box>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>
+        <Alert
+          severity="error"
+          sx={{ mb: 2, borderRadius: 2 }}
+          action={
+            <Button size="small" color="inherit" onClick={handleRetry}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       )}
 
       {/* Filters */}
@@ -255,7 +358,7 @@ export default function OfficerDashboard() {
               label="From"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+              InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 150 }}
             />
             <TextField
@@ -264,7 +367,7 @@ export default function OfficerDashboard() {
               label="To"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+              InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 150 }}
             />
             {/* Quick date filters */}
@@ -305,6 +408,29 @@ export default function OfficerDashboard() {
                 </Button>
               </Tooltip>
             )}
+            {savedPresets.length > 0 && (
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center', overflowX: 'auto', maxWidth: 280, py: 0.5, '&::-webkit-scrollbar': { height: 2 }, '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 1 } }}>
+                {savedPresets.map(p => (
+                  <Chip
+                    key={p.id}
+                    icon={<Bookmark fontSize="small" />}
+                    label={p.name}
+                    size="small"
+                    variant="outlined"
+                    onClick={() => applyPreset(p)}
+                    onDelete={() => deletePreset(p.id)}
+                    sx={{ fontSize: '0.75rem', '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText' } }}
+                  />
+                ))}
+              </Box>
+            )}
+            {hasActiveFilters && (
+              <Tooltip title="Save current filters as preset">
+                <IconButton size="small" onClick={handleOpenPresetDialog} sx={{ color: 'text.secondary', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <SaveAlt fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
             {viewMode === 'table' && prs.length > 0 && (
               <Tooltip title="Download visible data as CSV">
                 <Button size="small" startIcon={<Download />} onClick={handleExport}>
@@ -329,19 +455,28 @@ export default function OfficerDashboard() {
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', animation: 'fadeInUp 0.3s ease' }}>
             {summaryStats.map((stat) => (
               <Tooltip key={stat.label} title={`${stat.count} ${stat.label.toLowerCase()} request(s)`} arrow>
-                <Card sx={{ flex: 1, minWidth: 120 }}>
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: stat.color, mb: 0.5 }}>
-                      {stat.count}
+                <Card sx={{
+                  flex: 1, minWidth: 130,
+                  background: (theme) => theme.palette.mode === 'dark'
+                    ? `linear-gradient(135deg, ${stat.bg} 0%, rgba(0,0,0,0.2) 100%)`
+                    : `linear-gradient(135deg, ${stat.bg} 0%, rgba(255,255,255,0.8) 100%)`,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                  '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 },
+                }}>
+                  <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+                    <Typography variant="body2" color="text.secondary" fontWeight={500} sx={{ mb: 0.5, fontSize: '0.8rem' }}>
+                      {stat.label}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">{stat.label}</Typography>
+                    <AnimatedCounter value={stat.count} variant="h4" color={stat.color} />
                   </CardContent>
                 </Card>
               </Tooltip>
             ))}
           </Box>
 
-          <Card>
+          <Card sx={{ border: '1px solid', borderColor: 'divider' }}>
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               {prs.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -418,6 +553,7 @@ export default function OfficerDashboard() {
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Avatar
                               src={getAvatarUrl(pr.user?.name, 28)}
+                              alt={pr.user?.name || 'Requester avatar'}
                               sx={{ width: 28, height: 28 }}
                             />
                             <Box>
@@ -446,7 +582,57 @@ export default function OfficerDashboard() {
                               }}
                             />
                           </TableCell>
-                          {!isMobile && <TableCell><StatusChip status={pr.status} /></TableCell>}
+                          {!isMobile && (
+                            <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Chip
+                                icon={statusMenuTarget === pr.id ? <ArrowDropDown fontSize="small" /> : undefined}
+                                label={pr.status.charAt(0).toUpperCase() + pr.status.slice(1)}
+                                size="small"
+                                color={pr.status === 'pending' ? 'warning' : pr.status === 'quoted' ? 'info' : pr.status === 'ordered' ? 'primary' : pr.status === 'delivered' ? 'success' : 'error'}
+                                onClick={(e) => {
+                                  if (user?.role === 'officer' || user?.role === 'admin') {
+                                    e.stopPropagation();
+                                    setStatusMenuTarget(pr.status === statusMenuTarget ? null : pr.id);
+                                    setStatusMenuAnchor(e.currentTarget);
+                                  }
+                                }}
+                                sx={{
+                                  fontWeight: 600, fontSize: '0.75rem',
+                                  cursor: (user?.role === 'officer' || user?.role === 'admin') ? 'pointer' : 'default',
+                                  '&:hover': (user?.role === 'officer' || user?.role === 'admin') ? { filter: 'brightness(1.1)' } : {},
+                                }}
+                              />
+                              <Menu
+                                anchorEl={statusMenuAnchor}
+                                open={Boolean(statusMenuAnchor) && statusMenuTarget === pr.id}
+                                onClose={() => { setStatusMenuAnchor(null); setStatusMenuTarget(null); }}
+                                onClick={(e) => e.stopPropagation()}
+                                transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+                                anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+                                PaperProps={{ sx: { minWidth: 160, borderRadius: 2, mt: 1 } }}
+                              >
+                                {['pending', 'quoted', 'ordered', 'delivered', 'rejected'].filter(s => s !== pr.status).map(s => (
+                                  <MenuItem
+                                    key={s}
+                                    onClick={() => handleQuickStatusChange(pr.id, s)}
+                                    disabled={statusChanging}
+                                    sx={{ py: 1 }}
+                                  >
+                                     <ListItemIcon sx={{ minWidth: 32 }}>
+                                       {s === 'pending' ? <HourglassEmpty fontSize="small" color="warning" /> :
+                                        s === 'quoted' ? <FormatQuote fontSize="small" color="info" /> :
+                                        s === 'ordered' ? <CheckCircle fontSize="small" color="primary" /> :
+                                        s === 'rejected' ? <CancelIcon fontSize="small" color="error" /> :
+                                        <CheckCircle fontSize="small" color="success" />}
+                                     </ListItemIcon>
+                                    <ListItemText primary={s.charAt(0).toUpperCase() + s.slice(1)} />
+                                  </MenuItem>
+                                ))}
+                              </Menu>
+                            </Box>
+                          </TableCell>
+                          )}
                           {!isMobile && (
                             <TableCell>
                               <Typography variant="body2" fontWeight={500}>{pr.quotes?.length || 0}</Typography>
@@ -486,6 +672,34 @@ export default function OfficerDashboard() {
           </Card>
         </>
       )}
+
+      {/* Save Filter Preset Dialog */}
+      <Dialog open={presetDialog} onClose={() => setPresetDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Save Filter Preset</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Preset Name"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            placeholder="e.g., High urgency this week"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSavePreset(); } }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPresetDialog(false)} sx={{ borderRadius: 2 }}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleSavePreset}
+            disabled={!presetName.trim()}
+            sx={{ borderRadius: 2 }}
+          >
+            Save Preset
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

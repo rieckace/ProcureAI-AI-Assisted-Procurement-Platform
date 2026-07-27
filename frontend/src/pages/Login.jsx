@@ -1,17 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardContent, TextField, Button, Typography, Tabs, Tab,
-  Alert, InputAdornment, IconButton, Chip, CircularProgress, LinearProgress
+  Alert, InputAdornment, IconButton, Chip, CircularProgress, Paper
 } from '@mui/material';
-import { Visibility, VisibilityOff, Email, Lock, Person, Business } from '@mui/icons-material';
+import Autocomplete from '@mui/material/Autocomplete';
+import { Visibility, VisibilityOff, Email, Lock, Person, Business, Domain, ArrowBack, Search } from '@mui/icons-material';
+import { FormControlLabel, Checkbox } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
+import api from '../api';
 
 const demoCredentials = [
-  { role: 'Admin', email: 'admin@demo.com', color: 'rgba(26,115,232,0.15)', textColor: 'primary.main' },
-  { role: 'Officer', email: 'officer@demo.com', color: 'rgba(52,168,83,0.15)', textColor: 'success.main' },
-  { role: 'Manager', email: 'manager@demo.com', color: 'rgba(249,171,0,0.15)', textColor: 'warning.main' },
+  { role: 'Admin', email: 'pashupati@shivnathmill.com', color: 'rgba(26,115,232,0.15)', textColor: 'primary.main' },
+  { role: 'Officer', email: 'ravi@shivnathmill.com', color: 'rgba(52,168,83,0.15)', textColor: 'success.main' },
+  { role: 'Manager', email: 'rikesh@shivnathmill.com', color: 'rgba(249,171,0,0.15)', textColor: 'warning.main' },
 ];
 
 const ROLE_REDIRECTS = {
@@ -20,8 +23,7 @@ const ROLE_REDIRECTS = {
   manager: '/manager-dashboard',
 };
 
-const FIELD_ANIMATION = { animation: 'fadeInUp 0.35s ease' };
-const FIELD_DELAYS = [0, 0.05, 0.1, 0.15, 0.2];
+const FIELD_ANIMATION = { animationName: 'fadeInUp', animationDuration: '0.35s', animationTimingFunction: 'ease', animationFillMode: 'both' };
 
 export default function Login() {
   const navigate = useNavigate();
@@ -31,10 +33,26 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
+  // loginStep: 0 = enter org slug, 1 = enter credentials
+  const [loginStep, setLoginStep] = useState(0);
+  const [orgName, setOrgName] = useState('');
+  const [orgSlugLookupLoading, setOrgSlugLookupLoading] = useState(false);
+  const [orgSearchLoading, setOrgSearchLoading] = useState(false);
+  const [orgSuggestions, setOrgSuggestions] = useState([]);
+  const [orgInputValue, setOrgInputValue] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const searchTimerRef = useRef(null);
   const [form, setForm] = useState({
     name: '', email: '', password: '',
     organizationName: '', organizationSlug: '',
   });
+
+  // Reset login step when switching tabs
+  useEffect(() => {
+    setLoginStep(0);
+    setOrgName('');
+    setOrgInputValue('');
+  }, [tab]);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -53,6 +71,46 @@ export default function Login() {
     setError('');
   };
 
+  // Debounced search for organizations
+  const searchOrganizations = useCallback(async (query) => {
+    if (!query || query.length < 1) {
+      setOrgSuggestions([]);
+      return;
+    }
+    setOrgSearchLoading(true);
+    try {
+      const res = await api.get(`/auth/orgs/search?q=${encodeURIComponent(query)}`);
+      setOrgSuggestions(res.data.organizations || []);
+    } catch {
+      setOrgSuggestions([]);
+    } finally {
+      setOrgSearchLoading(false);
+    }
+  }, []);
+
+  // Separate useCallback for handleLookupOrg so it can be used in refs
+  const handleLookupOrg = async (slug) => {
+    const targetSlug = slug || form.organizationSlug.trim();
+    // If slug is empty, allow proceeding without org verification (for demo accounts)
+    if (!targetSlug) {
+      setOrgName('');
+      setLoginStep(1);
+      return;
+    }
+    setOrgSlugLookupLoading(true);
+    setError('');
+    try {
+      const res = await api.get(`/auth/org-by-slug/${targetSlug}`);
+      setOrgName(res.data.name);
+      setForm(prev => ({ ...prev, organizationSlug: targetSlug }));
+      setLoginStep(1);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Organization not found. Leave empty for demo accounts.');
+    } finally {
+      setOrgSlugLookupLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -61,7 +119,7 @@ export default function Login() {
     try {
       let userData;
       if (tab === 0) {
-        userData = await login(form.email, form.password);
+        userData = await login(form.email, form.password, form.organizationSlug || undefined, rememberMe);
       } else {
         if (!form.name.trim()) {
           setError('Name is required');
@@ -85,6 +143,10 @@ export default function Login() {
   const fillDemo = (email) => {
     setForm(prev => ({ ...prev, email, password: 'password123' }));
     setTab(0);
+    setOrgName('Shiv Nath Rice, flour and Oil Mill');
+    setOrgInputValue('shivnath-mill');
+    // Auto-advance past slug step so demo users go straight to login
+    setLoginStep(1);
   };
 
   return (
@@ -257,49 +319,254 @@ export default function Login() {
               />
             )}
 
-            <TextField
-              fullWidth
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={handleChange('email')}
-              required
-              autoFocus
-              sx={{
-                mb: 2,
-                animation: visible ? 'fadeInUp 0.35s ease 0.25s both' : 'none',
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start"><Email color="action" /></InputAdornment>
-                ),
-              }}
-            />
+            {/* Sign In — Step 1: Organization Slug (with autocomplete) */}
+            {tab === 0 && loginStep === 0 && (
+              <>
+                <Autocomplete
+                  freeSolo
+                  autoHighlight
+                  clearOnEscape
+                  value={form.organizationSlug}
+                  inputValue={orgInputValue}
+                  onInputChange={(event, newInputValue) => {
+                    setOrgInputValue(newInputValue);
+                    setForm(prev => ({ ...prev, organizationSlug: newInputValue }));
+                    setError('');
+                    // Debounced search (300ms)
+                    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+                    searchTimerRef.current = setTimeout(() => {
+                      searchOrganizations(newInputValue);
+                    }, 300);
+                  }}
+                  onChange={(event, newValue) => {
+                    if (newValue && typeof newValue === 'object') {
+                      // User selected an option from the dropdown
+                      setForm(prev => ({ ...prev, organizationSlug: newValue.slug }));
+                      setOrgInputValue(newValue.slug);
+                    }
+                  }}
+                  options={orgSuggestions}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    return `${option.name} (${option.slug})`;
+                  }}
+                  filterOptions={(x) => x} // We handle filtering on the backend
+                  loading={orgSearchLoading}
+                  noOptionsText={orgInputValue.length > 0 ? 'No organizations found' : 'Start typing...'}
+                  renderOption={(props, option) => {
+                    const { key, ...rest } = props;
+                    return (
+                      <Box component="li" key={key} {...rest} sx={{ py: 1.5, px: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                          <Domain sx={{ fontSize: 20, color: 'primary.main', opacity: 0.7 }} />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant="body2" fontWeight={600} noWrap>
+                              {option.name}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {option.slug}
+                            </Typography>
+                          </Box>
+                          <Chip
+                            label={option.slug}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem', flexShrink: 0 }}
+                          />
+                        </Box>
+                      </Box>
+                    );
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Your Organization"
+                      placeholder="e.g., acme-corp"
+                      helperText="Search for your organization or leave empty to skip"
+                      required
+                      autoFocus
+                      sx={{
+                        mb: 2,
+                        animation: visible ? 'fadeInUp 0.35s ease 0.25s both' : 'none',
+                      }}
+                      InputProps={{
+                        ...params.InputProps,
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Search color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  )}
+                  PaperComponent={(props) => (
+                    <Paper
+                      {...props}
+                      sx={{
+                        ...props.sx,
+                        mt: 0.5,
+                        borderRadius: 2,
+                        boxShadow: (theme) => theme.palette.mode === 'dark'
+                          ? '0 4px 20px rgba(0,0,0,0.4)'
+                          : '0 4px 20px rgba(0,0,0,0.1)',
+                      }}
+                    />
+                  )}
+                />
+                <Button
+                  type="button"
+                  fullWidth
+                  variant="contained"
+                  onClick={() => handleLookupOrg(form.organizationSlug)}
+                  disabled={orgSlugLookupLoading}
+                  sx={{
+                    py: 1.5,
+                    borderRadius: 2,
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    animation: visible ? 'fadeInUp 0.35s ease 0.3s both' : 'none',
+                    background: (theme) => theme.palette.mode === 'dark'
+                      ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
+                      : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
+                  }}
+                >
+                  {orgSlugLookupLoading ? <CircularProgress size={24} sx={{ color: 'white' }} /> :
+                   form.organizationSlug.trim() ? `Continue with ${form.organizationSlug}` : 'Skip & Continue'}
+                </Button>
+              </>
+            )}
 
-            <TextField
-              fullWidth
-              label="Password"
-              type={showPassword ? 'text' : 'password'}
-              value={form.password}
-              onChange={handleChange('password')}
-              required
-              sx={{
-                mb: tab === 1 ? 1 : 3,
-                animation: visible ? 'fadeInUp 0.35s ease 0.3s both' : 'none',
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start"><Lock color="action" /></InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" size="small">
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
+            {/* Sign In — Step 2: Credentials (shown after org slug is verified) */}
+            {tab === 0 && loginStep === 1 && (
+              <>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    mb: 2.5,
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    animation: visible ? 'fadeInUp 0.35s ease 0.15s both' : 'none',
+                  }}
+                >
+                  <Domain sx={{ fontSize: 20, color: 'primary.main' }} />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" fontWeight={600}>{orgName}</Typography>
+                    <Typography variant="caption" color="text.secondary">{form.organizationSlug}</Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<ArrowBack fontSize="small" />}
+                    onClick={() => setLoginStep(0)}
+                    sx={{ fontSize: '0.7rem', minWidth: 'auto' }}
+                  >
+                    Change
+                  </Button>
+                </Box>
+
+                <TextField
+                  fullWidth
+                  label="Email"
+                  type="email"
+                  value={form.email}
+                  onChange={handleChange('email')}
+                  required
+                  autoFocus
+                  sx={{ mb: 2, animation: visible ? 'fadeInUp 0.35s ease 0.2s both' : 'none' }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start"><Email color="action" /></InputAdornment>
+                    ),
+                  }}
+                />
+
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      size="small"
+                      sx={{ '&.Mui-checked': { color: 'primary.main' } }}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                      Remember me
+                    </Typography>
+                  }
+                  sx={{
+                    mb: 2,
+                    animation: visible ? 'fadeInUp 0.35s ease 0.25s both' : 'none',
+                  }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={handleChange('password')}
+                  required
+                  sx={{ mb: 3, animation: visible ? 'fadeInUp 0.35s ease 0.25s both' : 'none' }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start"><Lock color="action" /></InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" size="small">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </>
+            )}
+
+            {/* Register — Password field */}
+            {tab === 1 && (
+              <>
+                <TextField
+                  fullWidth
+                  label="Email"
+                  type="email"
+                  value={form.email}
+                  onChange={handleChange('email')}
+                  required
+                  sx={{ mb: 2, ...FIELD_ANIMATION, animationDelay: '0.3s' }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start"><Email color="action" /></InputAdornment>
+                    ),
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={handleChange('password')}
+                  required
+                  sx={{ mb: 1, animation: visible ? 'fadeInUp 0.35s ease 0.35s both' : 'none' }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start"><Lock color="action" /></InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" size="small">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </>
+            )}
 
             {tab === 1 && (
               <>
@@ -345,60 +612,33 @@ export default function Login() {
               </>
             )}
 
-            {/* Role redirect preview chip */}
-            {tab === 0 && (
-              <Box sx={{ mb: 2, textAlign: 'center', animation: visible ? 'fadeInUp 0.35s ease 0.35s both' : 'none' }}>
-                {demoCredentials.map((cred) => (
-                  <Box
-                    key={cred.role}
-                    sx={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      mx: 0.5,
-                      mb: 0.5,
-                      px: 1,
-                      py: 0.3,
-                      borderRadius: 1,
-                      backgroundColor: cred.color,
-                      fontSize: '0.65rem',
-                      color: cred.textColor,
-                      fontWeight: 500,
-                    }}
-                  >
-                    {cred.role}: {ROLE_REDIRECTS[cred.role.toLowerCase()]}
-                  </Box>
-                ))}
-                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.3 }}>
-                  You'll be redirected to your dashboard after signing in
-                </Typography>
-              </Box>
-            )}
-
-            <Button
-              fullWidth
-              type="submit"
-              variant="contained"
-              disabled={loading}
-              sx={{
-                py: 1.5,
-                borderRadius: 2,
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                animation: visible ? 'fadeInUp 0.35s ease 0.4s both' : 'none',
-                background: (theme) => theme.palette.mode === 'dark'
-                  ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-                  : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
-                '&:hover': {
+            {/* Submit button for Register OR Sign In step 2 */}
+            {(tab === 1 || (tab === 0 && loginStep === 1)) && (
+              <Button
+                fullWidth
+                type="submit"
+                variant="contained"
+                disabled={loading}
+                sx={{
+                  py: 1.5,
+                  borderRadius: 2,
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                  animation: visible ? 'fadeInUp 0.35s ease 0.3s both' : 'none',
                   background: (theme) => theme.palette.mode === 'dark'
-                    ? 'linear-gradient(135deg, #aecbfa 0%, #8ab4f8 100%)'
-                    : 'linear-gradient(135deg, #1557b0 0%, #124896 100%)',
-                },
-              }}
-            >
-              {loading ? <CircularProgress size={24} sx={{ color: 'white' }} /> :
-               tab === 0 ? 'Sign In' : 'Create Account'}
-            </Button>
+                    ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
+                    : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
+                  '&:hover': {
+                    background: (theme) => theme.palette.mode === 'dark'
+                      ? 'linear-gradient(135deg, #aecbfa 0%, #8ab4f8 100%)'
+                      : 'linear-gradient(135deg, #1557b0 0%, #124896 100%)',
+                  },
+                }}
+              >
+                {loading ? <CircularProgress size={24} sx={{ color: 'white' }} /> :
+                 tab === 0 ? 'Sign In' : 'Create Account'}
+              </Button>
+            )}
           </Box>
         </CardContent>
       </Card>

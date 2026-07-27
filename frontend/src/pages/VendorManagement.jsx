@@ -6,9 +6,10 @@ import {
   Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, Snackbar, Grid, Chip, InputAdornment, useMediaQuery, useTheme
 } from '@mui/material';
-import { Add, Edit, Delete, ArrowBack, Search, Business } from '@mui/icons-material';
+import { Add, Edit, Delete, ArrowBack, Search, Business, TrendingUp, CheckCircle, Warning, Star, StarBorder } from '@mui/icons-material';
 import api from '../api';
 import { CATEGORIES } from '../constants';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function VendorManagement() {
   const navigate = useNavigate();
@@ -131,13 +132,28 @@ export default function VendorManagement() {
 
   return (
     <Box>
-      <Button startIcon={<ArrowBack />} onClick={() => navigate(-1)} sx={{ mb: 2, color: 'text.secondary' }}>
+      <Button startIcon={<ArrowBack />} onClick={() => navigate(-1)} sx={{ mb: 2, color: 'text.secondary', textTransform: 'none' }}>
         Back
       </Button>
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 2,
+      }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
             Manage Vendors
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -148,7 +164,7 @@ export default function VendorManagement() {
           variant="contained"
           startIcon={<Add />}
           onClick={() => navigate('/add-vendor')}
-          sx={{ borderRadius: 2 }}
+          sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
         >
           Add Vendor
         </Button>
@@ -188,6 +204,60 @@ export default function VendorManagement() {
           </Box>
         </CardContent>
       </Card>
+
+      {/* Vendor Performance Scorecard */}
+      {vendors.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+            Performance Overview
+          </Typography>
+          <Grid container spacing={2}>
+            {(() => {
+              const avgRating = vendors.reduce((s, v) => s + v.rating, 0) / vendors.length;
+              const avgDelivery = vendors.reduce((s, v) => s + v.onTimeDelivery, 0) / vendors.length;
+              const avgDefect = vendors.reduce((s, v) => s + v.defectRate, 0) / vendors.length;
+              const highPerformers = vendors.filter(v => v.rating >= 4).length;
+              const topVendor = vendors.reduce((best, v) => v.rating > (best?.rating || 0) ? v : best, null);
+
+              const scorecards = [
+                { label: 'Avg Rating', value: `${avgRating.toFixed(1)}/5`, icon: <Star />, color: 'warning.main', bg: 'rgba(255,193,7,0.12)', highlight: avgRating >= 4 },
+                { label: 'On-Time Delivery', value: `${avgDelivery.toFixed(0)}%`, icon: <TrendingUp />, color: 'success.main', bg: 'rgba(76,175,80,0.12)', highlight: avgDelivery >= 85 },
+                { label: 'Defect Rate', value: `${avgDefect.toFixed(1)}%`, icon: avgDefect <= 3 ? <CheckCircle /> : <Warning />, color: avgDefect <= 3 ? 'success.main' : 'error.main', bg: avgDefect <= 3 ? 'rgba(76,175,80,0.12)' : 'rgba(244,67,54,0.12)', highlight: avgDefect <= 3 },
+                { label: 'Top Vendor', value: topVendor?.name || 'N/A', icon: <Business />, color: 'primary.main', bg: 'rgba(33,150,243,0.12)', highlight: true },
+                { label: 'High Performers', value: `${highPerformers}/${vendors.length}`, icon: <StarBorder />, color: 'secondary.main', bg: 'rgba(156,39,176,0.12)', highlight: highPerformers > vendors.length / 2 },
+              ];
+
+              return scorecards.map((card) => (
+                <Grid item xs={6} sm={4} md={2} key={card.label}>
+                  <Card sx={{
+                    background: (theme) => theme.palette.mode === 'dark'
+                      ? `linear-gradient(135deg, ${card.bg} 0%, rgba(0,0,0,0.2) 100%)`
+                      : `linear-gradient(135deg, ${card.bg} 0%, rgba(255,255,255,0.8) 100%)`,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 },
+                  }}>
+                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                        <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                          {card.label}
+                        </Typography>
+                        <Box sx={{ color: card.color, display: 'flex', alignItems: 'center' }}>
+                          {card.icon}
+                        </Box>
+                      </Box>
+                      <Typography variant="body1" sx={{ fontWeight: 700, color: card.color, fontSize: '0.95rem', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {card.value}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ));
+            })()}
+          </Grid>
+        </Box>
+      )}
 
       <Card>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -344,25 +414,17 @@ export default function VendorManagement() {
         </DialogActions>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)}>
-        <DialogTitle>Delete Vendor</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete <strong>{selectedVendor?.name}</strong>?
-            This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteDialog(false)} sx={{ borderRadius: 2 }}>Cancel</Button>
-          <Button
-            variant="contained" color="error" onClick={handleDeleteConfirm} disabled={saving}
-            sx={{ borderRadius: 2 }}
-          >
-            {saving ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={deleteDialog}
+        onClose={() => setDeleteDialog(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Vendor"
+        message={`Are you sure you want to delete **${selectedVendor?.name}**? This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmColor="error"
+        loading={saving}
+        severity="error"
+      />
 
       <Snackbar
         open={snackbar.open}

@@ -7,25 +7,42 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper to determine which storage to use
+  function getStorage(rememberMe) {
+    return rememberMe !== false ? localStorage : sessionStorage;
+  }
+
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
+    // Check localStorage first, then sessionStorage
+    let token = localStorage.getItem('token');
+    let savedUser = localStorage.getItem('user');
+    if (!token || !savedUser) {
+      token = sessionStorage.getItem('token');
+      savedUser = sessionStorage.getItem('user');
+    }
     if (token && savedUser) {
       try {
         setUser(JSON.parse(savedUser));
       } catch {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
       }
     }
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
+  const login = async (email, password, organizationSlug, rememberMe = true) => {
+    const response = await api.post('/auth/login', { email, password, organizationSlug });
     const { token, user: userData } = response.data;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(userData));
+    const storage = getStorage(rememberMe);
+    storage.setItem('token', token);
+    storage.setItem('user', JSON.stringify(userData));
+    // Clear the other storage to avoid stale data
+    const otherStorage = rememberMe !== false ? sessionStorage : localStorage;
+    otherStorage.removeItem('token');
+    otherStorage.removeItem('user');
     setUser(userData);
     return userData;
   };
@@ -58,6 +75,8 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     setUser(null);
   };
 

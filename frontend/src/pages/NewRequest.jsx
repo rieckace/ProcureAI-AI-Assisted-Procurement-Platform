@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, CardContent, TextField, Button, MenuItem,
   Alert, CircularProgress, Snackbar, InputAdornment
 } from '@mui/material';
-import { ArrowBack, Send, Inventory } from '@mui/icons-material';
+import { ArrowBack, Send, Inventory, CheckCircleOutline, RadioButtonUnchecked } from '@mui/icons-material';
 import api from '../api';
 import { CATEGORIES } from '../constants';
 
@@ -21,11 +21,76 @@ export default function NewRequest() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [form, setForm] = useState({
-    itemName: '', category: '', quantity: '', budget: '',
-    urgency: 'medium', justification: '',
+  const [form, setForm] = useState(() => {
+    // Load saved draft from localStorage
+    try {
+      const saved = localStorage.getItem('new_request_draft');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.itemName || parsed.justification) return parsed;
+      }
+    } catch { /* ignore */ }
+    return {
+      itemName: '', category: '', quantity: '', budget: '',
+      urgency: 'medium', justification: '',
+    };
   });
   const [errors, setErrors] = useState({});
+  const [draftSaved, setDraftSaved] = useState(false);
+  const draftTimerRef = useRef(null);
+
+  // Smart defaults based on category
+  const categoryDefaults = {
+    'IT': { itemName: 'Software License - ' },
+    'Office Supplies': { itemName: 'Office Supplies - ' },
+    'Furniture': { itemName: 'Office Furniture - ' },
+    'Equipment': { itemName: 'Equipment - ' },
+    'Services': { itemName: 'Consulting Services - ' },
+    'Software': { itemName: 'Software License - ' },
+  };
+
+  // Calculate form completion progress
+  const formProgress = useMemo(() => {
+    let completed = 0;
+    const total = 5;
+    if (form.itemName?.trim()) completed++;
+    if (form.category) completed++;
+    if (form.quantity && parseInt(form.quantity) > 0) completed++;
+    if (form.budget && parseFloat(form.budget) > 0) completed++;
+    if (form.urgency) completed++;
+    return { completed, total, percentage: Math.round((completed / total) * 100) };
+  }, [form]);
+
+  const handleCategoryChange = (e) => {
+    const newCat = e.target.value;
+    const defaults = categoryDefaults[newCat];
+    if (defaults && !form.itemName) {
+      // Pre-fill item name hint when category is selected
+      setForm(prev => ({ ...prev, category: newCat, itemName: defaults.itemName }));
+    } else {
+      setForm(prev => ({ ...prev, category: newCat }));
+    }
+    if (errors.category) setErrors(prev => ({ ...prev, category: '' }));
+  };
+
+  // Auto-save draft to localStorage every 2 seconds when form changes
+  useEffect(() => {
+    clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      const hasContent = form.itemName || form.category || form.quantity || form.budget || form.justification;
+      if (hasContent) {
+        localStorage.setItem('new_request_draft', JSON.stringify(form));
+        setDraftSaved(true);
+        setTimeout(() => setDraftSaved(false), 2000);
+      }
+    }, 2000);
+    return () => clearTimeout(draftTimerRef.current);
+  }, [form]);
+
+  // Clear draft on successful submit
+  const clearDraft = () => {
+    localStorage.removeItem('new_request_draft');
+  };
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
@@ -55,6 +120,7 @@ export default function NewRequest() {
     setError('');
     try {
       await api.post('/purchase-requests', form);
+      clearDraft();
       setSuccess(true);
       timerRef.current = setTimeout(() => navigate('/manager-dashboard'), 1500);
     } catch (err) {
@@ -76,21 +142,87 @@ export default function NewRequest() {
       <Button
         startIcon={<ArrowBack />}
         onClick={() => navigate('/manager-dashboard')}
-        sx={{ mb: 3, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}
+        sx={{ mb: 3, color: 'text.secondary', textTransform: 'none', '&:hover': { bgcolor: 'action.hover' } }}
       >
         Back to Dashboard
       </Button>
 
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-        New Purchase Request
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Submit a new procurement request for approval
-      </Typography>
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
+        <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+          New Purchase Request
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Submit a new procurement request for approval
+        </Typography>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>
       )}
+
+      {/* Form Progress Indicator */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ flex: 1, minWidth: 120 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" fontWeight={600} color="text.secondary">
+                  Form Completion
+                </Typography>
+                <Typography variant="caption" fontWeight={600} color={formProgress.percentage === 100 ? 'success.main' : 'primary.main'}>
+                  {formProgress.completed}/{formProgress.total}
+                </Typography>
+              </Box>
+              <Box sx={{ width: '100%', height: 6, bgcolor: 'action.hover', borderRadius: 3, overflow: 'hidden' }}>
+                <Box sx={{
+                  width: `${formProgress.percentage}%`,
+                  height: '100%',
+                  borderRadius: 3,
+                  transition: 'width 0.4s ease',
+                  background: formProgress.percentage === 100
+                    ? 'linear-gradient(90deg, #4caf50, #66bb6a)'
+                    : 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+                }} />
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              {['Item', 'Category', 'Qty', 'Budget', 'Urgency'].map((label, i) => {
+                const filled = i === 0 ? !!form.itemName?.trim()
+                  : i === 1 ? !!form.category
+                  : i === 2 ? (form.quantity && parseInt(form.quantity) > 0)
+                  : i === 3 ? (form.budget && parseFloat(form.budget) > 0)
+                  : !!form.urgency;
+                return (
+                  <Box key={label} title={filled ? `${label} ✓` : `Fill in ${label}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {filled
+                        ? <CheckCircleOutline sx={{ fontSize: 16, color: 'success.main' }} />
+                        : <RadioButtonUnchecked sx={{ fontSize: 16, color: 'text.disabled' }} />
+                      }
+                      <Typography variant="caption" color={filled ? 'success.main' : 'text.disabled'} sx={{ fontWeight: 500 }}>
+                        {label}
+                      </Typography>
+                    </Box>
+                );
+              })}
+            </Box>
+            {draftSaved && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', animation: 'fadeIn 0.3s ease' }}>
+                Draft saved
+              </Typography>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       <Card sx={{ transition: 'box-shadow 0.2s ease', '&:hover': { boxShadow: (t) => t.palette.mode === 'dark' ? '0 4px 20px rgba(0,0,0,0.4)' : '0 4px 20px rgba(0,0,0,0.1)' } }}>
         <CardContent sx={{ p: 3 }}>
@@ -116,8 +248,7 @@ export default function NewRequest() {
                 fullWidth
                 select
                 label="Category"
-                value={form.category}
-                onChange={handleChange('category')}
+                value={form.category}                  onChange={handleCategoryChange}
                 error={!!errors.category}
                 helperText={errors.category}
                 required

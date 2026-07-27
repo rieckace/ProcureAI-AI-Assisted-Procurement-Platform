@@ -2,50 +2,45 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, IconButton, Badge, Menu, MenuItem, Divider,
-  ListItemIcon, ListItemText, Chip, Avatar, Tooltip, CircularProgress
+  Tooltip, CircularProgress, Button, Chip
 } from '@mui/material';
 import {
-  Notifications, Circle, CheckCircle, SmartToy, ShoppingCart,
-  PersonAdd, Cancel, Edit, History, FormatQuote
+  Notifications, CheckCircle, ShoppingCart, Cancel, History,
+  FormatQuote, PersonAdd, Edit, Inventory2, DeleteSweep, Circle
 } from '@mui/icons-material';
 import api from '../api';
-import { getAvatarUrl } from '../utils/avatar';
+import { timeAgo } from '../utils/timeAgo';
 import { useAuth } from '../context/AuthContext';
 
-const ACTION_ICONS = {
-  created: <CheckCircle sx={{ fontSize: 16 }} />,
-  updated: <Edit sx={{ fontSize: 16 }} />,
-  status_changed: <History sx={{ fontSize: 16 }} />,
-  cancelled: <Cancel sx={{ fontSize: 16 }} />,
-  added_quote: <FormatQuote sx={{ fontSize: 16 }} />,
-  deleted_quote: <Cancel sx={{ fontSize: 16 }} />,
-  issued_po: <ShoppingCart sx={{ fontSize: 16 }} />,
-  invited_user: <PersonAdd sx={{ fontSize: 16 }} />,
+const NOTIFICATION_ICONS = {
+  status_change: <History sx={{ fontSize: 16 }} />,
+  new_quote: <FormatQuote sx={{ fontSize: 16 }} />,
+  po_issued: <ShoppingCart sx={{ fontSize: 16 }} />,
+  comment_added: <Edit sx={{ fontSize: 16 }} />,
+  vendor_added: <PersonAdd sx={{ fontSize: 16 }} />,
+  user_invited: <PersonAdd sx={{ fontSize: 16 }} />,
+  attachment_added: <Inventory2 sx={{ fontSize: 16 }} />,
 };
 
-const ACTION_COLORS = {
-  created: 'success.main',
-  updated: 'primary.main',
-  status_changed: 'warning.main',
-  cancelled: 'error.main',
-  added_quote: 'info.main',
-  deleted_quote: 'error.main',
-  issued_po: 'success.main',
-  invited_user: 'secondary.main',
+const NOTIFICATION_COLORS = {
+  status_change: 'warning.main',
+  new_quote: 'info.main',
+  po_issued: 'success.main',
+  comment_added: 'primary.main',
+  vendor_added: 'secondary.main',
+  user_invited: 'secondary.main',
+  attachment_added: 'primary.main',
 };
 
-function timeAgo(dateStr) {
-  const now = Date.now();
-  const diff = now - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
+const NOTIFICATION_EMOJIS = {
+  status_change: '🔄',
+  new_quote: '💰',
+  po_issued: '📦',
+  comment_added: '💬',
+  vendor_added: '🏢',
+  user_invited: '👤',
+  attachment_added: '📎',
+};
 
 export default function NotificationBell() {
   const { user } = useAuth();
@@ -54,26 +49,20 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [anchorEl, setAnchorEl] = useState(null);
   const [loading, setLoading] = useState(false);
-  const lastViewedRef = useRef(Date.now());
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const intervalRef = useRef(null);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
     try {
-      const res = await api.get('/notifications', {
-        headers: { 'x-last-viewed': String(lastViewedRef.current) },
-      });
+      const res = await api.get('/notifications', { params: { limit: 50 } });
       setNotifications(res.data.data);
       setUnreadCount(res.data.unreadCount);
     } catch {
       // Silently fail — notifications are non-critical
-    } finally {
-      setLoading(false);
     }
   }, [user]);
 
-  // Initial fetch
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
@@ -88,27 +77,44 @@ export default function NotificationBell() {
 
   const handleOpen = (e) => {
     setAnchorEl(e.currentTarget);
-    // Mark as read visually
-    setUnreadCount(0);
-    lastViewedRef.current = Date.now();
   };
 
   const handleClose = () => {
     setAnchorEl(null);
   };
 
-  const handleNotificationClick = (notification) => {
-    handleClose();
-    // Navigate based on entity type
-    if (notification.entity === 'PurchaseRequest' && notification.entityId) {
-      navigate(`/pr/${notification.entityId}`);
-    } else if (notification.action === 'invited_user') {
-      navigate('/admin');
-    } else if (notification.action === 'uploaded') {
-      navigate(`/pr/${notification.entityId}`);
-    } else {
-      navigate('/activity-log');
+  const handleMarkAllRead = async () => {
+    setMarkingAllRead(true);
+    try {
+      await api.post('/notifications/read-all');
+      setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch {
+      // Silently fail
+    } finally {
+      setMarkingAllRead(false);
     }
+  };
+
+  const handleNotificationClick = async (notification) => {
+    handleClose();
+    // Mark this notification as read
+    try {
+      await api.post(`/notifications/read/${notification.id}`);
+    } catch { /* silent */ }
+
+    if (notification.link) {
+      navigate(notification.link);
+    }
+  };
+
+  const handleDismiss = async (e, notifId) => {
+    e.stopPropagation();
+    try {
+      await api.delete(`/notifications/${notifId}`);
+      setNotifications(prev => prev.filter(n => n.id !== notifId));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch { /* silent */ }
   };
 
   if (!user) return null;
@@ -151,56 +157,80 @@ export default function NotificationBell() {
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         PaperProps={{
           sx: {
-            width: 380,
-            maxHeight: 480,
+            width: 400,
+            maxHeight: 500,
             borderRadius: 2,
             mt: 1,
             overflow: 'hidden',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
           },
         }}
       >
         {/* Header */}
-        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="subtitle2" fontWeight={600}>
-            Notifications
-          </Typography>
-          {notifications.length > 0 && (
-            <Box
-              onClick={(e) => {
-                e.stopPropagation();
-                setUnreadCount(0);
-                lastViewedRef.current = Date.now();
-                handleClose();
-              }}
+        <Box sx={{
+          px: 2, py: 1.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          bgcolor: 'background.paper',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle2" fontWeight={700}>
+              Notifications
+            </Typography>
+            {unreadCount > 0 && (
+              <Chip
+                label={unreadCount}
+                size="small"
+                color="error"
+                sx={{ height: 20, minWidth: 20, fontSize: '0.65rem', fontWeight: 700 }}
+              />
+            )}
+          </Box>
+          {unreadCount > 0 && (
+            <Button
+              size="small"
+              onClick={handleMarkAllRead}
+              disabled={markingAllRead}
               sx={{
                 fontSize: '0.7rem',
+                fontWeight: 600,
+                textTransform: 'none',
                 color: 'primary.main',
-                fontWeight: 500,
-                cursor: 'pointer',
-                '&:hover': { textDecoration: 'underline' },
+                minWidth: 'auto',
+                p: 0.5,
+                '&:hover': { bgcolor: 'action.hover' },
               }}
             >
-              Mark all read
-            </Box>
+              {markingAllRead ? <CircularProgress size={12} /> : 'Mark all read'}
+            </Button>
           )}
         </Box>
 
         {/* List */}
-        <Box sx={{ overflow: 'auto', maxHeight: 380 }}>
-          {loading ? (
+        <Box sx={{ overflow: 'auto', maxHeight: 400 }}>
+          {loading && notifications.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <CircularProgress size={24} />
             </Box>
           ) : notifications.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
-              <Notifications sx={{ fontSize: 40, mb: 1, opacity: 0.4 }} />
-              <Typography variant="body2">No notifications yet</Typography>
+            <Box sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
+              <Notifications sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography variant="body2" fontWeight={500}>No notifications yet</Typography>
+              <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
+                You'll see updates about your purchase requests here
+              </Typography>
             </Box>
           ) : (
-            notifications.map((notif, i) => {
-              const icon = ACTION_ICONS[notif.action] || <Circle sx={{ fontSize: 16 }} />;
-              const color = ACTION_COLORS[notif.action] || 'text.secondary';
-              const isNew = new Date(notif.createdAt).getTime() > lastViewedRef.current - 60000;
+            notifications.map((notif) => {
+              const emoji = NOTIFICATION_EMOJIS[notif.type] || '🔔';
+              const icon = NOTIFICATION_ICONS[notif.type] || <Circle sx={{ fontSize: 16 }} />;
+              const color = NOTIFICATION_COLORS[notif.type] || 'text.secondary';
 
               return (
                 <MenuItem
@@ -209,50 +239,64 @@ export default function NotificationBell() {
                   sx={{
                     px: 2,
                     py: 1.5,
-                    borderBottom: i < notifications.length - 1 ? '1px solid' : 'none',
+                    borderBottom: '1px solid',
                     borderColor: 'divider',
-                    bgcolor: isNew ? 'action.hover' : 'transparent',
-                    '&:hover': { bgcolor: 'action.hover' },
+                    bgcolor: notif.read ? 'transparent' : 'action.hover',
+                    borderLeft: notif.read ? '3px solid transparent' : '3px solid',
+                    borderLeftColor: notif.read ? 'transparent' : 'primary.main',
+                    transition: 'all 0.15s ease',
+                    '&:hover': {
+                      bgcolor: 'action.selected',
+                      transform: 'translateX(2px)',
+                    },
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 1.5,
                   }}
                 >
-                  <Avatar
-                    src={getAvatarUrl(notif.user?.name, 28)}
-                    sx={{ width: 28, height: 28, mt: 0.3, flexShrink: 0 }}
-                  />
+                  {/* Icon */}
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      bgcolor: notif.read ? 'action.hover' : `${color}.replace('.main', '.light')`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      mt: 0.3,
+                      color,
+                    }}
+                  >
+                    {icon}
+                  </Box>
+
+                  {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.3 }}>
-                      <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>
-                        {notif.user?.name || 'System'}
-                      </Typography>
-                      {isNew && (
-                        <Box
-                          sx={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: '50%',
-                            bgcolor: 'error.main',
-                            flexShrink: 0,
-                          }}
-                        />
-                      )}
-                    </Box>
                     <Typography
                       variant="body2"
-                      color="text.secondary"
-                      sx={{
-                        fontSize: '0.75rem',
-                        lineHeight: 1.4,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
+                      fontWeight={notif.read ? 500 : 700}
+                      sx={{ fontSize: '0.8rem', mb: 0.2 }}
                     >
-                      {notif.details || notif.action}
+                      {emoji} {notif.title}
                     </Typography>
+                    {notif.message && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          fontSize: '0.73rem',
+                          lineHeight: 1.4,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {notif.message}
+                      </Typography>
+                    )}
                     <Typography
                       variant="caption"
                       color="text.disabled"
@@ -261,17 +305,24 @@ export default function NotificationBell() {
                       {timeAgo(notif.createdAt)}
                     </Typography>
                   </Box>
-                  <Box
-                    sx={{
-                      color,
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexShrink: 0,
-                      mt: 0.3,
-                    }}
-                  >
-                    {icon}
-                  </Box>
+
+                  {/* Dismiss */}
+                  <Tooltip title="Dismiss">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleDismiss(e, notif.id)}
+                      sx={{
+                        opacity: 0,
+                        transition: 'opacity 0.15s ease',
+                        width: 24,
+                        height: 24,
+                        '&:hover': { bgcolor: 'action.hover' },
+                        '.MuiMenuItem-root:hover &': { opacity: 0.6 },
+                      }}
+                    >
+                      <DeleteSweep sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                 </MenuItem>
               );
             })
@@ -281,14 +332,21 @@ export default function NotificationBell() {
         {notifications.length > 0 && (
           <>
             <Divider />
-            <MenuItem
+            <Box
               onClick={() => { handleClose(); navigate('/activity-log'); }}
-              sx={{ justifyContent: 'center', py: 1 }}
+              sx={{
+                py: 1,
+                textAlign: 'center',
+                cursor: 'pointer',
+                bgcolor: 'background.paper',
+                '&:hover': { bgcolor: 'action.hover' },
+                transition: 'background-color 0.15s ease',
+              }}
             >
-              <Typography variant="body2" color="primary" fontWeight={500}>
+              <Typography variant="body2" color="primary" fontWeight={600} sx={{ fontSize: '0.8rem' }}>
                 View All Activity
               </Typography>
-            </MenuItem>
+            </Box>
           </>
         )}
       </Menu>

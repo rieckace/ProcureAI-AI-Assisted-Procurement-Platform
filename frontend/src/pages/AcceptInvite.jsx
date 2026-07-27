@@ -33,6 +33,10 @@ export default function AcceptInvite() {
       setError('Password must be at least 6 characters');
       return;
     }
+    if (!/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/[0-9]/.test(form.password)) {
+      setError('Password must include uppercase, lowercase, and a number');
+      return;
+    }
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match');
       return;

@@ -9,7 +9,9 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Add, Send, SmartToy, CheckCircle, CompareArrows,
-  Edit, Delete, Undo, CloudUpload, AttachFile, Download, NavigateNext
+  Edit, Delete, Undo, CloudUpload, AttachFile, Download, NavigateNext,
+  MailOutline, Refresh, Schedule, Cancel as CancelIcon, DoneAll,
+  Star, StarBorder, ContentCopy
 } from '@mui/icons-material';
 import api from '../api';
 import StatusChip from '../components/StatusChip';
@@ -68,6 +70,43 @@ export default function PRDetail() {
   const [deliverLoading, setDeliverLoading] = useState(false);
   const [deliverDialog, setDeliverDialog] = useState(false);
 
+  // Send Quote Requests
+  const [sendRequestsDialog, setSendRequestsDialog] = useState(false);
+  const [selectedVendorIds, setSelectedVendorIds] = useState([]);
+  const [sendRequestsLoading, setSendRequestsLoading] = useState(false);
+  const [sendRequestsResults, setSendRequestsResults] = useState(null);
+  const [quoteRequests, setQuoteRequests] = useState([]);
+
+  // Star/Favorite
+  const [isStarred, setIsStarred] = useState(() => {
+    const stars = JSON.parse(localStorage.getItem('starred_prs') || '[]');
+    return stars.includes(id);
+  });
+
+  const toggleStar = () => {
+    const stars = JSON.parse(localStorage.getItem('starred_prs') || '[]');
+    if (isStarred) {
+      localStorage.setItem('starred_prs', JSON.stringify(stars.filter(s => s !== id)));
+    } else {
+      localStorage.setItem('starred_prs', JSON.stringify([...stars, id]));
+    }
+    setIsStarred(!isStarred);
+  };
+
+  const handleCopySummary = () => {
+    const summary = `PR: ${pr?.itemName}\nStatus: ${pr?.status}\nBudget: $${pr?.budget?.toLocaleString()}\nQuantity: ${pr?.quantity} units\nCreated: ${new Date(pr?.createdAt).toLocaleDateString()}`;
+    navigator.clipboard.writeText(summary);
+    showToast('PR summary copied to clipboard', 'success');
+  };
+
+  // Budget utilization
+  const getBudgetUtilization = () => {
+    if (!pr?.quotes?.length) return null;
+    const minPrice = Math.min(...pr.quotes.map(q => q.price));
+    return Math.round((minPrice / pr.budget) * 100);
+  };
+  const budgetUtil = getBudgetUtilization();
+
   // Attachments
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -109,6 +148,10 @@ export default function PRDetail() {
           setVendors(vendorRes.data.data);
           setAttachments(attRes.data);
         }
+        // Fetch quote requests separately (non-blocking)
+        api.get(`/purchase-requests/${id}/quote-requests`).then(res => {
+          if (!cancelledRef.current) setQuoteRequests(res.data);
+        }).catch(() => {});
       } catch (err) {
         if (!cancelledRef.current) setError('Failed to load purchase request');
       } finally {
@@ -277,6 +320,7 @@ export default function PRDetail() {
       setCancelDialog(false);
       showToast('Purchase request cancelled');
       fetchPR();
+      fetchQuoteRequests();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to cancel', 'error');
     } finally {
@@ -291,6 +335,7 @@ export default function PRDetail() {
       setRollbackDialog(false);
       showToast('Status rolled back successfully');
       fetchPR();
+      fetchQuoteRequests();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to rollback', 'error');
     } finally {
@@ -307,6 +352,7 @@ export default function PRDetail() {
       setQuoteToDelete(null);
       showToast('Quote deleted successfully');
       fetchPR();
+      fetchQuoteRequests();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to delete quote', 'error');
     } finally {
@@ -320,10 +366,81 @@ export default function PRDetail() {
       await api.patch(`/purchase-requests/${id}/status`, { status: 'delivered' });
       showToast('Marked as delivered');
       fetchPR();
+      fetchQuoteRequests();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to update status', 'error');
     } finally {
       setDeliverLoading(false);
+    }
+  };
+
+  const fetchQuoteRequests = async () => {
+    try {
+      const res = await api.get(`/purchase-requests/${id}/quote-requests`);
+      setQuoteRequests(res.data);
+    } catch (err) {
+      // silent
+    }
+  };
+
+  const handleSendRequests = async () => {
+    if (selectedVendorIds.length === 0) {
+      showToast('Select at least one vendor', 'error');
+      return;
+    }
+    setSendRequestsLoading(true);
+    setSendRequestsResults(null);
+    try {
+      const res = await api.post(`/purchase-requests/${id}/send-requests`, {
+        vendorIds: selectedVendorIds
+      });
+      setSendRequestsResults(res.data.results);
+      showToast(`Quote requests sent to ${res.data.results.filter(r => r.status === 'sent').length} vendor(s)`);
+      fetchQuoteRequests();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to send requests', 'error');
+    } finally {
+      setSendRequestsLoading(false);
+    }
+  };
+
+  const handleToggleVendor = (vendorId) => {
+    setSelectedVendorIds(prev =>
+      prev.includes(vendorId)
+        ? prev.filter(id => id !== vendorId)
+        : [...prev, vendorId]
+    );
+  };
+
+  const handleSelectAllVendors = () => {
+    const availableVendors = vendors.filter(v => {
+      const hasQuote = pr.quotes?.some(q => q.vendorId === v.id);
+      const hasCompleted = quoteRequests.some(qr => qr.vendorId === v.id && qr.status === 'completed');
+      const hasActive = quoteRequests.some(qr => qr.vendorId === v.id && qr.status === 'sent' && new Date(qr.expiresAt) > new Date());
+      return !hasQuote && !hasCompleted && !hasActive;
+    });
+    setSelectedVendorIds(availableVendors.map(v => v.id));
+  };
+
+  const handleResendRequest = async (requestId) => {
+    try {
+      const res = await api.post(`/purchase-requests/${id}/resend-request/${requestId}`);
+      showToast(res.data.message || 'Quote request resent');
+      fetchQuoteRequests();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to resend', 'error');
+    }
+  };
+
+  const handleCancelRequest = async (requestId) => {
+    try {
+      await api.post(`/purchase-requests/${id}/cancel-request/${requestId}`);
+      showToast('Quote request cancelled', 'success');
+      fetchQuoteRequests();
+      // Also refresh PR — cancel might affect PR status if it was the only pending request
+      fetchPR();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to cancel request', 'error');
     }
   };
 
@@ -375,13 +492,32 @@ export default function PRDetail() {
       </Breadcrumbs>
 
       {/* PR Header */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{
+        mb: 3,
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(0,0,0,0.2) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(255,255,255,0.8) 100%)',
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-                {pr.itemName}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+                  {pr.itemName}
+                </Typography>
+                <Tooltip title={isStarred ? 'Remove from favorites' : 'Add to favorites'}>
+                  <IconButton size="small" onClick={toggleStar} sx={{ color: isStarred ? 'warning.main' : 'text.disabled', mb: 0.5 }}>
+                    {isStarred ? <Star fontSize="small" /> : <StarBorder fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Copy PR summary">
+                  <IconButton size="small" onClick={handleCopySummary} sx={{ mb: 0.5 }}>
+                    <ContentCopy fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 <StatusChip status={pr.status} />
                 <Chip
@@ -415,6 +551,7 @@ export default function PRDetail() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.3 }}>
                 <Avatar
                   src={getAvatarUrl(pr.user?.name, 24)}
+                  alt={pr.user?.name || 'Requester avatar'}
                   sx={{ width: 24, height: 24 }}
                 />
                 <Typography variant="body2">{pr.user?.name || 'N/A'}</Typography>
@@ -425,6 +562,30 @@ export default function PRDetail() {
               <Typography variant="body2" fontWeight={600}>{pr.quotes?.length || 0}</Typography>
             </Grid>
           </Grid>
+
+          {budgetUtil !== null && (
+            <Box sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" fontWeight={500}>Budget Utilization</Typography>
+                <Typography variant="caption" fontWeight={600} color={budgetUtil > 100 ? 'error.main' : budgetUtil > 80 ? 'warning.main' : 'success.main'}>
+                  {budgetUtil}% (${Math.min(...pr.quotes.map(q => q.price)).toLocaleString()} / ${pr.budget.toLocaleString()})
+                </Typography>
+              </Box>
+              <Box sx={{ width: '100%', bgcolor: 'action.hover', borderRadius: 1, height: 8, overflow: 'hidden' }}>
+                <Box sx={{
+                  width: `${Math.min(budgetUtil, 100)}%`,
+                  height: '100%',
+                  borderRadius: 1,
+                  transition: 'width 0.5s ease',
+                  background: budgetUtil > 100
+                    ? 'linear-gradient(90deg, #f44336, #d32f2f)'
+                    : budgetUtil > 80
+                      ? 'linear-gradient(90deg, #ff9800, #f57c00)'
+                      : 'linear-gradient(90deg, #4caf50, #388e3c)',
+                }} />
+              </Box>
+            </Box>
+          )}
 
           {pr.justification && (
             <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2 }}>
@@ -448,6 +609,16 @@ export default function PRDetail() {
               sx={{ borderRadius: 2 }}
             >
               Add Quote
+            </Button>
+          )}
+          {!isCompleted && (
+            <Button
+              variant="outlined"
+              startIcon={<MailOutline />}
+              onClick={() => { setSelectedVendorIds([]); setSendRequestsResults(null); setSendRequestsDialog(true); fetchQuoteRequests(); }}
+              sx={{ borderRadius: 2 }}
+            >
+              Send Quote Requests
             </Button>
           )}
           {pr.status === 'ordered' && (
@@ -601,6 +772,108 @@ export default function PRDetail() {
                 </Box>
               </Box>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quote Request Tracking */}
+      {quoteRequests.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">
+                Quote Request Status ({quoteRequests.length})
+              </Typography>
+              <Chip
+                size="small"
+                label={`${quoteRequests.filter(qr => qr.status === 'completed').length}/${quoteRequests.length} submitted`}
+                color={quoteRequests.every(qr => qr.status === 'completed') ? 'success' : 'default'}
+              />
+            </Box>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Vendor</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                    <TableCell>Sent</TableCell>
+                    <TableCell>Deadline</TableCell>
+                    <TableCell align="center">Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {quoteRequests.map((qr) => {
+                    const isExpired = qr.expiresAt && new Date(qr.expiresAt) < new Date();
+                    const statusLabel = qr.status === 'completed' ? 'Submitted'
+                      : isExpired ? 'Expired'
+                      : qr.status === 'sent' ? 'Pending'
+                      : qr.status;
+                    const statusColor = qr.status === 'completed' ? 'success'
+                      : isExpired ? 'error'
+                      : qr.status === 'sent' ? 'warning'
+                      : 'default';
+                    const statusIcon = qr.status === 'completed' ? <DoneAll fontSize="small" />
+                      : isExpired ? <CancelIcon fontSize="small" />
+                      : <Schedule fontSize="small" />;
+
+                    return (
+                      <TableRow key={qr.id}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{qr.vendor?.name || 'Unknown'}</Typography>
+                          <Typography variant="caption" color="text.secondary">{qr.vendor?.email}</Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            icon={statusIcon}
+                            label={statusLabel}
+                            size="small"
+                            color={statusColor}
+                            variant={qr.status === 'completed' ? 'filled' : 'outlined'}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {qr.sentAt ? new Date(qr.sentAt).toLocaleDateString() : '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {qr.expiresAt ? (
+                            <Typography
+                              variant="body2"
+                              sx={{ color: isExpired ? 'error.main' : 'text.primary' }}
+                            >
+                              {new Date(qr.expiresAt).toLocaleDateString()}
+                            </Typography>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                            {(qr.status === 'sent' || isExpired || qr.status === 'cancelled') && qr.status !== 'completed' && (
+                              <>
+                                {(isExpired || qr.status === 'cancelled') && (
+                                  <Tooltip title={qr.status === 'cancelled' ? 'Re-send quote request' : 'Resend quote request'}>
+                                    <IconButton size="small" color="primary" onClick={() => handleResendRequest(qr.id)}>
+                                      <Refresh fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                {qr.status !== 'cancelled' && (
+                                  <Tooltip title="Cancel quote request">
+                                    <IconButton size="small" color="error" onClick={() => handleCancelRequest(qr.id)}>
+                                      <CancelIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </>
+                            )}
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       )}
@@ -947,6 +1220,147 @@ export default function PRDetail() {
           >
             {rollbackLoading ? 'Rolling back...' : 'Confirm Rollback'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Send Quote Requests Dialog */}
+      <Dialog open={sendRequestsDialog} onClose={() => setSendRequestsDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600 }}>Send Quote Requests</DialogTitle>
+        <DialogContent>
+          {sendRequestsResults ? (
+            <Box sx={{ pt: 1 }}>
+              <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+                Quote requests processed successfully
+              </Alert>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Vendor</TableCell>
+                      <TableCell align="center">Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sendRequestsResults.map((r) => (
+                      <TableRow key={r.vendorId}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{r.vendorName}</Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={r.status === 'sent' ? 'Email Sent' : r.status === 'skipped' ? 'Skipped' : 'Email Failed'}
+                            size="small"
+                            color={r.status === 'sent' ? 'success' : r.status === 'skipped' ? 'default' : 'error'}
+                          />
+                          {r.reason && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                              {r.reason}
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : (
+            <Box sx={{ pt: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select vendors to send quote request emails. Each vendor will receive a unique link to submit their proposal.
+              </Typography>
+
+              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                <Button size="small" variant="outlined" onClick={handleSelectAllVendors}>
+                  Select All Available
+                </Button>
+                <Button size="small" variant="outlined" onClick={() => setSelectedVendorIds([])}>
+                  Clear Selection
+                </Button>
+                {selectedVendorIds.length > 0 && (
+                  <Chip label={`${selectedVendorIds.length} selected`} color="primary" size="small" />
+                )}
+              </Box>
+
+              <TableContainer sx={{ maxHeight: 400 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox">Select</TableCell>
+                      <TableCell>Vendor</TableCell>
+                      <TableCell>Category</TableCell>
+                      <TableCell align="center">Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {vendors.map((vendor) => {
+                      const hasQuote = pr.quotes?.some(q => q.vendorId === vendor.id);
+                      const hasCompleted = quoteRequests.some(qr => qr.vendorId === vendor.id && qr.status === 'completed');
+                      const hasActive = quoteRequests.some(qr => qr.vendorId === vendor.id && qr.status === 'sent' && new Date(qr.expiresAt) > new Date());
+                      const hasCancelled = quoteRequests.some(qr => qr.vendorId === vendor.id && qr.status === 'cancelled');
+                      const hasExpired = quoteRequests.some(qr => qr.vendorId === vendor.id && (qr.status === 'expired' || (qr.status === 'sent' && new Date(qr.expiresAt) <= new Date())));
+                      const isDisabled = hasQuote || hasCompleted || hasActive;
+                      const isSelected = selectedVendorIds.includes(vendor.id);
+
+                      return (
+                        <TableRow
+                          key={vendor.id}
+                          hover={!isDisabled}
+                          sx={{ opacity: isDisabled ? 0.5 : 1 }}
+                        >
+                          <TableCell padding="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isDisabled}
+                              onChange={() => handleToggleVendor(vendor.id)}
+                              style={{ width: 18, height: 18, cursor: isDisabled ? 'not-allowed' : 'pointer' }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={500}>{vendor.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{vendor.email}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={vendor.category} size="small" variant="outlined" />
+                          </TableCell>
+                          <TableCell align="center">
+                            {hasQuote ? (
+                              <Chip label="Quoted" size="small" color="success" />
+                            ) : hasCompleted ? (
+                              <Chip label="Submitted" size="small" color="info" />
+                            ) : hasActive ? (
+                              <Chip label="Pending" size="small" color="warning" />
+                            ) : hasCancelled || hasExpired ? (
+                              <Chip label="Cancelled/Expired" size="small" color="warning" variant="outlined" />
+                            ) : (
+                              <Chip label="Available" size="small" variant="outlined" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setSendRequestsDialog(false)} sx={{ borderRadius: 2 }}>
+            {sendRequestsResults ? 'Close' : 'Cancel'}
+          </Button>
+          {!sendRequestsResults && (
+            <Button
+              variant="contained"
+              startIcon={sendRequestsLoading ? <CircularProgress size={18} /> : <MailOutline />}
+              onClick={handleSendRequests}
+              disabled={sendRequestsLoading || selectedVendorIds.length === 0}
+              sx={{ borderRadius: 2 }}
+            >
+              {sendRequestsLoading ? 'Sending...' : `Send to ${selectedVendorIds.length} Vendor(s)`}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

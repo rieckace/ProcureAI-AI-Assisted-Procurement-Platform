@@ -68,16 +68,28 @@ export default function AddVendor() {
 
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto', animation: 'fadeInUp 0.35s ease' }}>
-      <Button startIcon={<ArrowBack />} onClick={() => navigate(-1)} sx={{ mb: 3, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}>
+      <Button startIcon={<ArrowBack />} onClick={() => navigate(-1)} sx={{ mb: 3, color: 'text.secondary', textTransform: 'none', '&:hover': { bgcolor: 'action.hover' } }}>
         Back
       </Button>
 
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-        Add New Vendor
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Register a new vendor in the procurement system
-      </Typography>
+      {/* Header Banner */}
+      <Box sx={{
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+        borderRadius: 3,
+        p: 3,
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
+        <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+          Add New Vendor
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Register a new vendor in the procurement system
+        </Typography>
+      </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
 
