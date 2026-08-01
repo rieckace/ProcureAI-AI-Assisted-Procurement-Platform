@@ -46,15 +46,38 @@ function buildTheme(mode) {
   return createTheme({
     palette: { mode, ...(mode === 'dark' ? darkPalette : lightPalette) },
     typography: {
-      fontFamily: '"Google Sans", "Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-      h4: { fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.01em' },
-      h5: { fontWeight: 600, fontSize: '1.35rem', letterSpacing: '-0.01em' },
-      h6: { fontWeight: 600, fontSize: '1.05rem' },
+      fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica", "Arial", sans-serif',
+      h1: {
+        fontFamily: '"Sora", "Inter", sans-serif',
+        fontWeight: 800,
+        fontSize: '2.5rem',
+        letterSpacing: '-0.03em',
+        lineHeight: 1.12,
+      },
+      h2: {
+        fontFamily: '"Sora", "Inter", sans-serif',
+        fontWeight: 800,
+        fontSize: '2.1rem',
+        letterSpacing: '-0.025em',
+        lineHeight: 1.15,
+      },
+      h3: {
+        fontFamily: '"Sora", "Inter", sans-serif',
+        fontWeight: 700,
+        fontSize: '1.7rem',
+        letterSpacing: '-0.02em',
+        lineHeight: 1.2,
+      },
+      h4: { fontWeight: 700, fontSize: '1.55rem', letterSpacing: '-0.015em', lineHeight: 1.25 },
+      h5: { fontWeight: 700, fontSize: '1.25rem', letterSpacing: '-0.01em' },
+      h6: { fontWeight: 600, fontSize: '1.05rem', letterSpacing: '-0.005em' },
       subtitle1: { fontWeight: 500 },
       subtitle2: { fontWeight: 500, fontSize: '0.8125rem' },
-      body2: { fontSize: '0.875rem' },
+      body1: { fontSize: '0.9375rem', lineHeight: 1.6 },
+      body2: { fontSize: '0.875rem', lineHeight: 1.55 },
       caption: { fontSize: '0.75rem', fontWeight: 400 },
-      button: { textTransform: 'none', fontWeight: 500, fontSize: '0.875rem' },
+      overline: { letterSpacing: '0.08em' },
+      button: { textTransform: 'none', fontWeight: 600, fontSize: '0.875rem', letterSpacing: '0.005em' },
     },
     shape: { borderRadius: 6 },
     transitions: {
@@ -74,6 +97,33 @@ function buildTheme(mode) {
             scrollBehavior: 'smooth',
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',
+          },
+          // Respect users who prefer reduced motion (accessibility)
+          '@media (prefers-reduced-motion: reduce)': {
+            '*, *::before, *::after': {
+              animationDuration: '0.01ms !important',
+              animationIterationCount: '1 !important',
+              transitionDuration: '0.01ms !important',
+              scrollBehavior: 'auto !important',
+            },
+          },
+          // Clean app-wide printing: hide chrome, keep content
+          '@media print': {
+            'header, nav, .MuiDrawer-root, .MuiFab-root, .MuiAppBar-root': {
+              display: 'none !important',
+            },
+            'main': {
+              padding: '0 !important',
+              width: '100% !important',
+              maxWidth: '100% !important',
+              margin: '0 !important',
+            },
+            'body': {
+              backgroundColor: '#ffffff !important',
+            },
+            '@page': {
+              margin: '14mm 12mm',
+            },
           },
           '@keyframes fadeInUp': {
             from: { opacity: 0, transform: 'translateY(12px)' },
@@ -123,6 +173,19 @@ function buildTheme(mode) {
           '@keyframes countUp': {
             from: { opacity: 0, transform: 'translateY(8px)' },
             to: { opacity: 1, transform: 'translateY(0)' },
+          },
+          '@keyframes pageEnter': {
+            from: { opacity: 0, transform: 'translateY(14px) scale(0.995)' },
+            to: { opacity: 1, transform: 'translateY(0) scale(1)' },
+          },
+          '@keyframes floatSlow': {
+            '0%, 100%': { transform: 'translateY(0px) translateX(0px)' },
+            '50%': { transform: 'translateY(-22px) translateX(10px)' },
+          },
+          '@keyframes blob': {
+            '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+            '33%': { transform: 'translate(30px, -20px) scale(1.1)' },
+            '66%': { transform: 'translate(-20px, 20px) scale(0.95)' },
           },
           '@keyframes ripple': {
             '0%': { transform: 'scale(0)', opacity: 0.5 },

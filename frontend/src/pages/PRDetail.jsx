@@ -242,6 +242,12 @@ export default function PRDetail() {
       fetchPR();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to issue PO', 'error');
+      // If a PO already exists for this request, refresh so the UI reflects reality
+      if (err.response?.data?.alreadyOrdered) {
+        setPoDialog(false);
+        setSelectedQuote(null);
+        fetchPR();
+      }
     } finally {
       setPoLoading(false);
     }
@@ -414,7 +420,8 @@ export default function PRDetail() {
 
   const handleSelectAllVendors = () => {
     const availableVendors = vendors.filter(v => {
-      const hasQuote = pr.quotes?.some(q => q.vendorId === v.id);
+      // Agent-estimated quotes don't block sending a real quote request
+      const hasQuote = pr.quotes?.some(q => q.vendorId === v.id && !(q.notes?.includes('Auto-estimated by Procura')));
       const hasCompleted = quoteRequests.some(qr => qr.vendorId === v.id && qr.status === 'completed');
       const hasActive = quoteRequests.some(qr => qr.vendorId === v.id && qr.status === 'sent' && new Date(qr.expiresAt) > new Date());
       return !hasQuote && !hasCompleted && !hasActive;

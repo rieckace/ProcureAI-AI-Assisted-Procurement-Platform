@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
-import { Box, CircularProgress } from '@mui/material';
+import BrandSplash from './components/BrandSplash';
 
 // Lazy-loaded pages for code splitting
 const Login = lazy(() => import('./pages/Login'));
@@ -23,19 +23,15 @@ const LandingPage = lazy(() => import('./pages/LandingPage'));
 const AvatarStudio = lazy(() => import('./pages/AvatarStudio'));
 const Profile = lazy(() => import('./pages/Profile'));
 const VendorQuoteForm = lazy(() => import('./pages/VendorQuoteForm'));
+const InventoryPage = lazy(() => import('./pages/InventoryPage'));
+const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'));
+const DeliveryTracking = lazy(() => import('./pages/DeliveryTracking'));
+const AgentDashboard = lazy(() => import('./pages/AgentDashboard'));
 const NotFound = lazy(() => import('./pages/NotFound'));
-
-function PageLoader() {
-  return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-      <CircularProgress />
-    </Box>
-  );
-}
 
 function LazyPage({ Component, ...props }) {
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<BrandSplash />}>
       <Component {...props} />
     </Suspense>
   );
@@ -109,6 +105,26 @@ function AppRoutes() {
         <Route path="/analytics" element={<LazyPage Component={Analytics} />} />
         <Route path="/avatar-studio" element={<LazyPage Component={AvatarStudio} />} />
         <Route path="/profile" element={<LazyPage Component={Profile} />} />
+        <Route path="/inventory" element={
+          <ProtectedRoute roles={['officer', 'admin']}>
+            <LazyPage Component={InventoryPage} />
+          </ProtectedRoute>
+        } />
+        <Route path="/purchase-orders" element={
+          <ProtectedRoute roles={['officer', 'admin']}>
+            <LazyPage Component={PurchaseOrders} />
+          </ProtectedRoute>
+        } />
+        <Route path="/deliveries" element={
+          <ProtectedRoute roles={['officer', 'admin']}>
+            <LazyPage Component={DeliveryTracking} />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent" element={
+          <ProtectedRoute roles={['officer', 'admin']}>
+            <LazyPage Component={AgentDashboard} />
+          </ProtectedRoute>
+        } />
       </Route>
 
       <Route path="*" element={<LazyPage Component={NotFound} />} />

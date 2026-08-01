@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { getAvatarUrl } from '../utils/avatar';
+import ActivityHeatmap from '../components/ActivityHeatmap';
 import api from '../api';
 
 export default function Profile() {
@@ -84,6 +85,39 @@ export default function Profile() {
   };
 
   const currentStyle = localStorage.getItem('procura_avatar_style') || 'big-smile';
+
+  // Activity heatmap — gather the user's activity timestamps from their own requests
+  const [activityDates, setActivityDates] = useState([]);
+  const [heatmapLoading, setHeatmapLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadActivity = async () => {
+      if (!user) return;
+      setHeatmapLoading(true);
+      try {
+        let prs = [];
+        if (user.role === 'manager') {
+          const res = await api.get('/purchase-requests/my-requests?limit=200');
+          prs = res.data.data || [];
+        } else {
+          const res = await api.get('/purchase-requests?limit=200');
+          prs = (res.data.data || []).filter(p => p.userId === user.id);
+        }
+        if (!cancelled) {
+          setActivityDates(prs.map(p => p.createdAt).filter(Boolean));
+        }
+      } catch {
+        // silent — heatmap just shows empty
+      } finally {
+        if (!cancelled) setHeatmapLoading(false);
+      }
+    };
+    loadActivity();
+    return () => { cancelled = true; };
+  }, [user]);
+
+
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', animation: 'fadeInUp 0.35s ease' }}>
@@ -182,6 +216,25 @@ export default function Profile() {
               {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
             </Button>
           </Box>
+        </CardContent>
+      </Card>
+
+      {/* Activity Heatmap */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <Box sx={{ fontSize: 22, lineHeight: 1 }}>🔥</Box>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Your Activity
+            </Typography>
+          </Box>
+          {heatmapLoading ? (
+            <Box sx={{ py: 3, textAlign: 'center' }}>
+              <CircularProgress size={26} />
+            </Box>
+          ) : (
+            <ActivityHeatmap dates={activityDates} weeks={17} />
+          )}
         </CardContent>
       </Card>
 

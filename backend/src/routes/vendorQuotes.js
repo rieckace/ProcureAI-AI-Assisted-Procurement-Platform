@@ -48,7 +48,8 @@ router.get('/vendor-quote/:token', async (req, res) => {
       }
     });
 
-    if (existingQuote) {
+    // Agent-estimated quotes don't block a real vendor submission
+    if (existingQuote && !existingQuote.notes?.includes('Auto-estimated by Procura')) {
       return res.status(400).json({ error: 'A quote has already been submitted for this request', completed: true });
     }
 
@@ -127,8 +128,13 @@ router.post('/vendor-quote/:token', async (req, res) => {
       }
     });
 
-    if (existingQuote) {
+    if (existingQuote && !existingQuote.notes?.includes('Auto-estimated by Procura')) {
       return res.status(400).json({ error: 'A quote has already been submitted for this request' });
+    }
+
+    // Replace the agent's estimated quote with the vendor's real quote
+    if (existingQuote) {
+      await prisma.quote.delete({ where: { id: existingQuote.id } });
     }
 
     const quote = await prisma.quote.create({

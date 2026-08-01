@@ -32,7 +32,7 @@ test.describe('Layout & Navigation', () => {
     await page.goto('/officer-dashboard');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
-    const userBtn = page.getByRole('button', { name: /Sarah Officer|Admin User|Mike Manager/i }).first();
+    const userBtn = page.getByRole('button', { name: /Pashupati|Ravi|Rikesh/i }).first();
     await expect(userBtn).toBeVisible({ timeout: TIMEOUTS.shortAction });
   });
 });

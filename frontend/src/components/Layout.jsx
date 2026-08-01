@@ -9,7 +9,8 @@ import {
 import {
   Menu as MenuIcon, Dashboard, Add, Store, AdminPanelSettings, Logout, History,
   DarkMode, LightMode, BarChart, SmartToy, Person,
-  ChevronLeft, ChevronRight, NavigateNext
+  ChevronLeft, ChevronRight, NavigateNext,
+  Inventory2, Receipt, LocalShipping
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
@@ -22,6 +23,9 @@ import NotificationBell from './NotificationBell';
 import ScrollToTop from './ScrollToTop';
 import GlobalSearch from './GlobalSearch';
 import KeyboardShortcuts from './KeyboardShortcuts';
+import PageTransition from './PageTransition';
+import OnboardingTour from './OnboardingTour';
+import Logo from './Logo';
 import { getAvatarUrl } from '../utils/avatar';
 
 const DRAWER_EXPANDED = 220;
@@ -38,6 +42,10 @@ const PAGE_TITLES = {
   '/admin': 'Admin Panel',
   '/profile': 'My Profile',
   '/avatar-studio': 'Avatar Studio',
+  '/inventory': 'Inventory Management',
+  '/purchase-orders': 'Purchase Orders',
+  '/deliveries': 'Delivery Tracking',
+  '/agent': 'Procura Agent',
 };
 
 export default function Layout() {
@@ -170,11 +178,17 @@ export default function Layout() {
 
   const breadcrumbs = getBreadcrumbs();
 
+  // Time-based greeting for the header
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const firstName = user?.name?.split(' ')[0] || '';
+  const greetingEmoji = hour < 12 ? '☀️' : hour < 18 ? '🌤️' : '🌙';
+
   const navItems = [];
   if (user?.role === 'manager') {
     navItems.push(
       { text: 'My Requests', icon: <Dashboard />, path: '/manager-dashboard', badge: true },
-      { text: 'New Request', icon: <Add />, path: '/new-request' },
+      { text: 'New Request', icon: <Add />, path: '/new-request', tour: 'new-request' },
       { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
     );
   }
@@ -182,6 +196,10 @@ export default function Layout() {
     navItems.push(
       { text: 'All Requests', icon: <Dashboard />, path: '/officer-dashboard', badge: true },
       { text: 'Vendors', icon: <Store />, path: '/manage-vendors' },
+      { text: 'Inventory', icon: <Inventory2 />, path: '/inventory' },
+      { text: 'Purchase Orders', icon: <Receipt />, path: '/purchase-orders' },
+      { text: 'Deliveries', icon: <LocalShipping />, path: '/deliveries' },
+      { text: 'Procura Agent', icon: <SmartToy />, path: '/agent' },
       { text: 'Activity Log', icon: <History />, path: '/activity-log' },
       { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
     );
@@ -191,6 +209,10 @@ export default function Layout() {
       { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' },
       { text: 'Manager View', icon: <Dashboard />, path: '/manager-dashboard', badge: true },
       { text: 'Officer View', icon: <Store />, path: '/officer-dashboard', badge: true },
+      { text: 'Inventory', icon: <Inventory2 />, path: '/inventory' },
+      { text: 'Purchase Orders', icon: <Receipt />, path: '/purchase-orders' },
+      { text: 'Deliveries', icon: <LocalShipping />, path: '/deliveries' },
+      { text: 'Procura Agent', icon: <SmartToy />, path: '/agent' },
       { text: 'Avatar Studio', icon: <SmartToy />, path: '/avatar-studio' },
       { text: 'Activity Log', icon: <History />, path: '/activity-log' },
       { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
@@ -232,79 +254,14 @@ export default function Layout() {
           <Box
             sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', flex: 1, minWidth: 0 }}
             onClick={() => navigate('/')}
+            data-tour="logo"
           >
-            <Box
-              sx={{
-                width: 36,
-                height: 36,
-                borderRadius: 1.5,
-                background: (theme) => theme.palette.mode === 'dark'
-                  ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-                  : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: (theme) => theme.palette.mode === 'dark'
-                  ? '0 2px 10px rgba(138,180,248,0.3)'
-                  : '0 2px 10px rgba(26,115,232,0.35)',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  transform: 'scale(1.05)',
-                  boxShadow: (theme) => theme.palette.mode === 'dark'
-                    ? '0 4px 16px rgba(138,180,248,0.4)'
-                    : '0 4px 16px rgba(26,115,232,0.45)',
-                },
-              }}
-            >
-              <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>P</Typography>
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              {/* ProcureAI — the product name, bold and prominent */}
-              <Typography
-                noWrap
-                sx={{
-                  fontWeight: 800,
-                  fontSize: '1.05rem',
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1.2,
-                  color: (theme) => theme.palette.mode === 'dark' ? '#8ab4f8' : 'primary.main',
-                  background: (theme) => theme.palette.mode === 'dark'
-                    ? 'linear-gradient(135deg, #8ab4f8, #aecbfa)'
-                    : 'linear-gradient(135deg, #1a73e8, #1557b0)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                ProcureAI
-              </Typography>
-              <Typography noWrap sx={{ fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.1, letterSpacing: '0.02em' }}>
-                AI Procurement System
-              </Typography>
-            </Box>
+            <Logo size={36} withWordmark wordmarkSize="1.05rem" />
           </Box>
         )}
         {isCollapsed && (
-          <Box
-            sx={{
-              width: 36,
-              height: 36,
-              borderRadius: 1.5,
-              background: (theme) => theme.palette.mode === 'dark'
-                ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-                : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: (theme) => theme.palette.mode === 'dark'
-                ? '0 2px 10px rgba(138,180,248,0.3)'
-                : '0 2px 10px rgba(26,115,232,0.35)',
-            }}
-            onClick={() => navigate('/')}
-          >
-            <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>P</Typography>
+          <Box sx={{ cursor: 'pointer' }} onClick={() => navigate('/')}>
+            <Logo size={36} />
           </Box>
         )}
         {!isCollapsed && (
@@ -371,6 +328,7 @@ export default function Layout() {
                   navigate(item.path);
                   setMobileOpen(false);
                 }}
+                {...(item.tour ? { 'data-tour': item.tour } : {})}
                 sx={{
                   borderRadius: 1,
                   mx: isCollapsed ? 0.3 : 0.5,
@@ -554,7 +512,11 @@ export default function Layout() {
         elevation={0}
         sx={{
           zIndex: (theme) => theme.zIndex.drawer + 1,
-          bgcolor: 'background.paper',
+          bgcolor: (theme) => theme.palette.mode === 'dark'
+            ? 'rgba(32,33,36,0.82)'
+            : 'rgba(255,255,255,0.78)',
+          backdropFilter: 'blur(16px) saturate(1.5)',
+          WebkitBackdropFilter: 'blur(16px) saturate(1.5)',
           borderBottom: '1px solid',
           borderColor: 'divider',
           borderRadius: 0,
@@ -610,7 +572,7 @@ export default function Layout() {
             >
               {getPageTitle()}
             </Typography>
-            {breadcrumbs && (
+            {breadcrumbs ? (
               <Breadcrumbs
                 separator={<NavigateNext sx={{ fontSize: 12 }} />}
                 aria-label="breadcrumb"
@@ -635,6 +597,24 @@ export default function Layout() {
                   )
                 ))}
               </Breadcrumbs>
+            ) : (
+              <Typography
+                noWrap
+                sx={{
+                  fontWeight: 600,
+                  fontSize: { xs: '0.65rem', sm: '0.72rem' },
+                  background: (theme) => theme.palette.mode === 'dark'
+                    ? 'linear-gradient(135deg, #aecbfa, #81c995)'
+                    : 'linear-gradient(135deg, #1a73e8, #188038)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  lineHeight: 1.2,
+                  mt: -0.1,
+                }}
+              >
+                {greeting}{firstName ? `, ${firstName}` : ''} {greetingEmoji}
+              </Typography>
             )}
           </Box>
 
@@ -644,6 +624,7 @@ export default function Layout() {
             <Tooltip title="Toggle theme" arrow>
               <IconButton
                 size="small"
+                data-tour="theme"
                 onClick={() => {
                   setThemeSpinning(true);
                   toggleTheme();
@@ -827,9 +808,9 @@ export default function Layout() {
           transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
     >
-      <Box key={location.key} sx={{ animation: 'fadeInUp 0.35s ease' }}>
+      <PageTransition>
         <Outlet />
-      </Box>
+      </PageTransition>
     </Box>
 
       {/* User Menu — at layout level so it works on mobile + desktop */}
@@ -873,6 +854,7 @@ export default function Layout() {
       )}
       <ProcuraTips />
       <ScrollToTop />
+      <OnboardingTour />
       <Box
         id="skip-to-content"
         component="a"

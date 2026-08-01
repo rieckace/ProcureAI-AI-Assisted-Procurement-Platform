@@ -2,13 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardContent, TextField, Button, Typography, Tabs, Tab,
-  Alert, InputAdornment, IconButton, Chip, CircularProgress, Paper
+  Alert, InputAdornment, IconButton, Chip, CircularProgress, Paper, Grid, useTheme
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
-import { Visibility, VisibilityOff, Email, Lock, Person, Business, Domain, ArrowBack, Search } from '@mui/icons-material';
+import { Visibility, VisibilityOff, Email, Lock, Person, Business, Domain, ArrowBack, Search, SmartToy, Speed, Security } from '@mui/icons-material';
 import { FormControlLabel, Checkbox } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
+import Logo from '../components/Logo';
+import AnimatedCounter from '../components/AnimatedCounter';
 import api from '../api';
 
 const demoCredentials = [
@@ -149,6 +151,15 @@ export default function Login() {
     setLoginStep(1);
   };
 
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
+  const brandHighlights = [
+    { icon: <SmartToy sx={{ fontSize: 20 }} />, title: 'AI Vendor Recommendations', desc: 'Smart scoring across price, delivery, and quality.' },
+    { icon: <Speed sx={{ fontSize: 20 }} />, title: 'End-to-End Workflow', desc: 'Requests → quotes → PO → delivery, all in one place.' },
+    { icon: <Security sx={{ fontSize: 20 }} />, title: 'Secure Role-Based Access', desc: 'Admins, officers, and managers — each with the right view.' },
+  ];
+
   return (
     <Box
       sx={{
@@ -178,51 +189,128 @@ export default function Login() {
         },
       }}
     >
-      <Card
+      <Grid
+        container
         sx={{
-          maxWidth: 460,
+          position: 'relative',
           width: '100%',
-          overflow: 'visible',
-          opacity: visible ? 1 : 0,
-          transform: visible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.97)',
-          transition: 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: visible
-            ? (theme) => theme.palette.mode === 'dark'
-              ? '0 8px 32px rgba(0,0,0,0.4)'
-              : '0 8px 32px rgba(0,0,0,0.1)'
-            : 'none',
+          maxWidth: 1100,
+          minHeight: '100vh',
+          mx: 'auto',
+          alignItems: 'center',
+          py: 4,
         }}
       >
-        {/* Logo Header */}
-        <Box sx={{ textAlign: 'center', pt: 4, pb: 2, px: 3 }}>
-          <Box
+        {/* ─── Brand Panel (desktop) ─── */}
+        <Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' }, px: { md: 3, lg: 6 } }}>
+          <Box sx={{ maxWidth: 440, animation: visible ? 'fadeInUp 0.6s ease 0.05s both' : 'none' }}>
+            <Logo size={48} withWordmark wordmarkSize="1.4rem" />
+            <Typography
+              variant="h2"
+              sx={{ mt: 4, mb: 2, fontWeight: 800 }}
+            >
+              Procurement,
+              <Box component="span" sx={{
+                display: 'block',
+                background: isDark
+                  ? 'linear-gradient(135deg, #aecbfa 0%, #81c995 100%)'
+                  : 'linear-gradient(135deg, #1a73e8 0%, #34a853 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>
+                simplified & smart.
+              </Box>
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 400 }}>
+              From purchase requests to delivered goods — let Procura, your AI procurement
+              assistant, handle the busywork.
+            </Typography>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              {brandHighlights.map((h, i) => (
+                <Box
+                  key={h.title}
+                  sx={{
+                    display: 'flex',
+                    gap: 1.5,
+                    alignItems: 'flex-start',
+                    opacity: visible ? 1 : 0,
+                    transform: visible ? 'translateY(0)' : 'translateY(12px)',
+                    transition: `all 0.5s ease ${0.15 + i * 0.1}s`,
+                  }}
+                >
+                  <Box sx={{
+                    width: 40, height: 40, borderRadius: 2, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'primary.main',
+                    bgcolor: isDark ? 'rgba(138,180,248,0.1)' : 'rgba(26,115,232,0.08)',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}>
+                    {h.icon}
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>{h.title}</Typography>
+                    <Typography variant="body2" color="text.secondary">{h.desc}</Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+
+            {/* Mini stats strip */}
+            <Box sx={{
+              mt: 5, pt: 3, borderTop: '1px solid', borderColor: 'divider',
+              display: 'flex', gap: 4, opacity: visible ? 1 : 0,
+              transition: 'opacity 0.6s ease 0.5s',
+            }}>
+              <Box>
+                <AnimatedCounter value={2500} suffix="+" variant="h6" color="primary.main" />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Requests</Typography>
+              </Box>
+              <Box>
+                <AnimatedCounter value={180} suffix="+" variant="h6" color="success.main" />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Vendors</Typography>
+              </Box>
+              <Box>
+                <AnimatedCounter value={96} suffix="%" variant="h6" color="warning.main" />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>On-time</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Grid>
+
+        {/* ─── Auth Card ─── */}
+        <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center', px: { xs: 0, md: 2 } }}>
+          <Card
             sx={{
-              width: 64, height: 64, borderRadius: 3,
-              background: 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              mx: 'auto', mb: 2,
-              boxShadow: '0 4px 12px rgba(26,115,232,0.3)',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              '&:hover': {
-                transform: 'scale(1.08) rotate(-3deg)',
-                boxShadow: '0 8px 25px rgba(26,115,232,0.4)',
-              },
-              animation: visible ? 'float 3s ease-in-out infinite' : 'none',
+              maxWidth: 460,
+              width: '100%',
+              overflow: 'visible',
+              borderRadius: 3,
+              opacity: visible ? 1 : 0,
+              transform: visible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.97)',
+              transition: 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: visible
+                ? (theme) => theme.palette.mode === 'dark'
+                  ? '0 16px 48px rgba(0,0,0,0.45)'
+                  : '0 16px 48px rgba(26,115,232,0.12)'
+                : 'none',
+              backdropFilter: 'blur(12px)',
+              bgcolor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(32,33,36,0.85)'
+                : 'rgba(255,255,255,0.82)',
             }}
           >
-            <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>P</Typography>
+        {/* Logo Header (mobile) */}
+        <Box sx={{ textAlign: 'center', pt: 4, pb: 1.5, px: 3, display: { xs: 'block', md: 'none' } }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
+            <Logo size={56} />
           </Box>
-          <Typography
-            variant="h5"
-            sx={{ fontWeight: 700, mb: 0.5, animation: visible ? 'fadeInUp 0.4s ease' : 'none' }}
-          >
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
             Welcome to ProcureAI
           </Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ animation: visible ? 'fadeInUp 0.4s ease 0.1s both' : 'none' }}
-          >
+          <Typography variant="body2" color="text.secondary">
             AI-Powered Procurement Management
           </Typography>
         </Box>
@@ -641,7 +729,9 @@ export default function Login() {
             )}
           </Box>
         </CardContent>
-      </Card>
+        </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 }

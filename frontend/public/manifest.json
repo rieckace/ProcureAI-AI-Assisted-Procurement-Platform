@@ -1,0 +1,17 @@
+{
+  "name": "ProcureAI — AI Procurement Management System",
+  "short_name": "ProcureAI",
+  "description": "AI-powered procurement management: requests, quotes, purchase orders, deliveries, and an autonomous agent.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f1f3f4",
+  "theme_color": "#1a73e8",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

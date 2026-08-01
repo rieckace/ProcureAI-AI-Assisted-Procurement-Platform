@@ -14,8 +14,13 @@ const attachmentRoutes = require('./routes/attachments');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notifications');
 const vendorQuoteRoutes = require('./routes/vendorQuotes');
+const inventoryRoutes = require('./routes/inventory');
+const agentRoutes = require('./routes/agent');
+const purchaseOrderRoutes = require('./routes/purchaseOrders');
+const deliveryRoutes = require('./routes/deliveries');
 const prisma = require('./lib/prisma');
 const logger = require('./lib/logger');
+const { initScheduler } = require('./services/schedulerService');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -76,6 +81,10 @@ app.use('/api', generalLimiter, attachmentRoutes);
 app.use('/api/chat', generalLimiter, chatRoutes);
 app.use('/api/notifications', generalLimiter, notificationRoutes);
 app.use('/api/quotes', generalLimiter, vendorQuoteRoutes);
+app.use('/api/inventory', generalLimiter, inventoryRoutes);
+app.use('/api/agent', generalLimiter, agentRoutes);
+app.use('/api/purchase-orders', generalLimiter, purchaseOrderRoutes);
+app.use('/api/deliveries', generalLimiter, deliveryRoutes);
 
 // Health check
 app.get('/api/health', async (req, res) => {
@@ -99,6 +108,9 @@ app.use((err, req, res, next) => {
     error: err.expose ? err.message : 'An unexpected error occurred. Please try again later.'
   });
 });
+
+// Initialize background scheduler
+initScheduler();
 
 const server = app.listen(PORT, () => {
   console.log(`ProcureAI backend running on port ${PORT}`);

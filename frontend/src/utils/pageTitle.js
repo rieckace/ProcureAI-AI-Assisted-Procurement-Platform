@@ -12,6 +12,10 @@ const TITLE_MAP = {
   '/profile': 'Profile',
   '/avatar-studio': 'Avatar Studio',
   '/accept-invite': 'Accept Invitation',
+  '/inventory': 'Inventory',
+  '/purchase-orders': 'Purchase Orders',
+  '/deliveries': 'Delivery Tracking',
+  '/agent': 'Procura Agent',
 };
 
 export function updatePageTitle(pathname) {
@@ -21,10 +25,14 @@ export function updatePageTitle(pathname) {
     return;
   }
   // Check prefix matches
-  if (pathname.startsWith('/pr/')) {
+  if (pathname.startsWith('/pr/') && pathname.endsWith('/compare')) {
+    document.title = 'Vendor Comparison — ProcureAI';
+  } else if (pathname.startsWith('/pr/')) {
     document.title = 'Request Details — ProcureAI';
   } else if (pathname.startsWith('/accept-invite')) {
     document.title = 'Accept Invitation — ProcureAI';
+  } else if (pathname.startsWith('/vendor-quote/')) {
+    document.title = 'Vendor Quote — ProcureAI';
   } else {
     document.title = 'ProcureAI — Procurement Management';
   }

@@ -7,11 +7,27 @@ const { chatCompletions } = require('./modelProvider');
 function scoreVendors(quotes) {
   if (!quotes || quotes.length === 0) return [];
 
-  // Find max values for normalization
-  const maxPrice = Math.max(...quotes.map(q => q.price));
-  const maxDeliveryDays = Math.max(...quotes.map(q => q.deliveryDays));
+  // Sanitize input — guard against missing fields, zero values, and NaN scores
+  const safeQuotes = quotes.map(q => ({
+    ...q,
+    price: parseFloat(q.price) || 0,
+    deliveryDays: parseInt(q.deliveryDays) || 7,
+    vendor: q.vendor || {
+      id: q.vendorId,
+      name: 'Unknown Vendor',
+      email: null,
+      category: null,
+      onTimeDelivery: 95,
+      defectRate: 1,
+      rating: 4,
+    },
+  }));
 
-  const scored = quotes.map(quote => {
+  // Find max values for normalization (spread with 0 avoids Math.max() on empty)
+  const maxPrice = Math.max(...safeQuotes.map(q => q.price), 0);
+  const maxDeliveryDays = Math.max(...safeQuotes.map(q => q.deliveryDays), 0);
+
+  const scored = safeQuotes.map(quote => {
     const vendor = quote.vendor;
 
     // Price score - lower price is better (inverse normalized)

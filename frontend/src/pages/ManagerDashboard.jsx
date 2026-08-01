@@ -6,14 +6,14 @@ import {
   Pagination, TextField, MenuItem, InputAdornment, ToggleButton,
   ToggleButtonGroup, LinearProgress, useMediaQuery, useTheme
 } from '@mui/material';
-import { Add, Visibility, Search, ViewKanban, TableChart, Download, FilterAltOff, Inbox, SearchOff, Today, DateRange } from '@mui/icons-material';
+import { Add, Visibility, Search, ViewKanban, TableChart, Download, FilterAltOff, Inbox, SearchOff, Today, DateRange, HourglassEmpty, FormatQuote, LocalShipping } from '@mui/icons-material';
 import api from '../api';
 import { useToast } from '../context/ToastContext';
 import StatusChip from '../components/StatusChip';
 import KanbanBoard from '../components/KanbanBoard';
 import UrgencyFilter from '../components/UrgencyFilter';
 import { DashboardSkeleton } from '../components/Skeletons';
-import AnimatedCounter from '../components/AnimatedCounter';
+import DashboardHero from '../components/DashboardHero';
 import { URGENCY_COLORS } from '../constants';
 import { exportToCsv } from '../utils/exportCsv';
 
@@ -158,19 +158,50 @@ export default function ManagerDashboard() {
     exportToCsv(prs, columns, `my-purchase-requests-${new Date().toISOString().slice(0, 10)}`);
   };
 
-  const summaryStats = useMemo(() => {
+  // Hero stats — sparklines + progress ring computed from loaded requests
+  const heroStats = useMemo(() => {
     const counts = { pending: 0, quoted: 0, ordered: 0, delivered: 0 };
     prs.forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
+    const days = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      days.push(d.toDateString());
+    }
+    const spark = days.map(day => prs.filter(p => p.createdAt && new Date(p.createdAt).toDateString() === day).length);
+    const completion = prs.length > 0 ? Math.round((counts.delivered / prs.length) * 100) : 0;
     return [
-      { label: 'Total Requests', count: prs.length, color: 'primary.main', bg: 'rgba(26,115,232,0.12)' },
-      { label: 'Pending', count: counts.pending, color: 'warning.main', bg: 'rgba(249,171,0,0.12)' },
-      { label: 'Quoted', count: counts.quoted, color: 'info.main', bg: 'rgba(33,150,243,0.12)' },
-      { label: 'Ordered', count: counts.ordered, color: 'primary.main', bg: 'rgba(26,115,232,0.12)' },
-      { label: 'Delivered', count: counts.delivered, color: 'success.main', bg: 'rgba(46,125,50,0.12)' },
+      {
+        label: 'Total Requests',
+        value: prs.length,
+        icon: <Inbox />,
+        hex: '#1a73e8',
+        sparkline: spark,
+      },
+      {
+        label: 'Pending',
+        value: counts.pending,
+        icon: <HourglassEmpty />,
+        hex: '#f9ab00',
+        pulse: counts.pending > 0,
+      },
+      {
+        label: 'Quoted',
+        value: counts.quoted,
+        icon: <FormatQuote />,
+        hex: '#4285f4',
+      },
+      {
+        label: 'Delivered',
+        value: completion,
+        icon: <LocalShipping />,
+        hex: '#34a853',
+        ring: true,
+        subLabel: `${counts.delivered} of ${prs.length} requests`,
+      },
     ];
   }, [prs]);
-
-  // Auto-dismiss errors (must be before early return — Rules of Hooks)
   useEffect(() => {
     if (!error) return;
     const t = setTimeout(() => setError(''), 8000);
@@ -249,6 +280,9 @@ export default function ManagerDashboard() {
           {error}
         </Alert>
       )}
+
+      {/* Hero stat cards with sparklines */}
+      <DashboardHero stats={heroStats} />
 
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
@@ -370,31 +404,6 @@ export default function ManagerDashboard() {
       {/* Table View */}
       {viewMode === 'table' && (
         <>
-          {/* Summary Cards */}
-          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', animation: 'fadeInUp 0.3s ease' }}>
-            {summaryStats.map((stat) => (
-              <Tooltip key={stat.label} title={`${stat.count} ${stat.label.toLowerCase()} request(s)`} arrow>
-                <Card sx={{
-                  flex: 1, minWidth: 130,
-                  background: (theme) => theme.palette.mode === 'dark'
-                    ? `linear-gradient(135deg, ${stat.bg} 0%, rgba(0,0,0,0.2) 100%)`
-                    : `linear-gradient(135deg, ${stat.bg} 0%, rgba(255,255,255,0.8) 100%)`,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                  '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 },
-                }}>
-                  <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-                    <Typography variant="body2" color="text.secondary" fontWeight={500} sx={{ mb: 0.5, fontSize: '0.8rem' }}>
-                      {stat.label}
-                    </Typography>
-                    <AnimatedCounter value={stat.count} variant="h4" color={stat.color} />
-                  </CardContent>
-                </Card>
-              </Tooltip>
-            ))}
-          </Box>
-
           {/* PR Table */}
           <Card>
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -522,8 +531,11 @@ export default function ManagerDashboard() {
                 </TableContainer>
               </Box>
               )}
-              {pagination.totalPages > 1 && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary">
+                  Showing {prs.length} of {pagination.total} request(s)
+                </Typography>
+                {pagination.totalPages > 1 && (
                   <Pagination
                     count={pagination.totalPages}
                     page={page}
@@ -531,8 +543,8 @@ export default function ManagerDashboard() {
                     color="primary"
                     size="small"
                   />
-                </Box>
-              )}
+                )}
+              </Box>
             </CardContent>
           </Card>
         </>

@@ -4,9 +4,10 @@ const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { authenticate, authorize } = require('../middleware/auth');
 const { scoreVendors, generateRecommendation } = require('../services/aiService');
-const { sendQuoteRequestEmail, sendPurchaseOrderEmail, sendVendorQuoteEmail } = require('../services/emailService');
+const { sendVendorQuoteEmail } = require('../services/emailService');
+const poGeneratorService = require('../services/poGeneratorService');
 const { logActivity } = require('./activityLogs');
-const { notifyQuoteReceived, notifyPOIssued } = require('../services/notificationService');
+const { notifyQuoteReceived } = require('../services/notificationService');
 const logger = require('../lib/logger');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -49,7 +50,8 @@ router.post('/:id/send-requests', authenticate, authorize('officer', 'admin'), a
       const existingQuote = await prisma.quote.findFirst({
         where: { prId: pr.id, vendorId: vendor.id }
       });
-      if (existingQuote) {
+      // Agent-estimated quotes can be replaced — allow real quote requests for those vendors
+      if (existingQuote && !existingQuote.notes?.includes('Auto-estimated by Procura')) {
         results.push({ vendorId: vendor.id, vendorName: vendor.name, status: 'skipped', reason: 'Quote already exists' });
         continue;
       }
@@ -411,8 +413,13 @@ router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (r
       where: { prId: req.params.id, vendorId }
     });
 
-    if (existingQuote) {
+    if (existingQuote && !existingQuote.notes?.includes('Auto-estimated by Procura')) {
       return res.status(400).json({ error: `${vendor.name} already has a quote for this request. Delete the existing quote first.` });
+    }
+
+    // If the existing quote was auto-estimated by the agent, replace it with the real one
+    if (existingQuote) {
+      await prisma.quote.delete({ where: { id: existingQuote.id } });
     }
 
     const quote = await prisma.quote.create({
@@ -526,6 +533,8 @@ router.get('/:id/recommendation', authenticate, async (req, res) => {
 });
 
 // POST /api/purchase-requests/:id/issue-po - Issue purchase order
+// Uses the unified PO generator so POs appear in /purchase-orders and
+// deliveries are tracked on /deliveries.
 router.post('/:id/issue-po', authenticate, authorize('officer', 'admin'), async (req, res) => {
   try {
     const { vendorId, quoteId } = req.body;
@@ -563,42 +572,23 @@ router.post('/:id/issue-po', authenticate, authorize('officer', 'admin'), async 
       return res.status(404).json({ error: 'Quote not found' });
     }
 
-    // Update PR status to 'ordered'
-    await prisma.purchaseRequest.update({
-      where: { id: req.params.id },
-      data: { status: 'ordered' }
-    });
+    // Generate PO + delivery record (also updates PR status, notifies, emails vendor)
+    const po = await poGeneratorService.createPO(pr.id, quote.vendorId, req.user.id, req.user.organizationId);
 
-    logActivity(req.user.id, 'issued_po', 'PurchaseRequest', req.params.id, `Issued PO to ${quote.vendor.name} for $${quote.price}`, req.user.organizationId);
-
-    // Notify the requester
-    notifyPOIssued(req.params.id, quote.vendor.name, quote.price);
-
-    // Send purchase order email
-    let emailResult = null;
-    try {
-      emailResult = await sendPurchaseOrderEmail(quote.vendor.email, quote.vendor.name, {
-        itemName: pr.itemName,
-        quantity: pr.quantity,
-        price: quote.price,
-        deliveryDays: quote.deliveryDays,
-        urgency: pr.urgency
-      });
-    } catch (emailErr) {
-      logger.warn('quotes.issuePo.sendEmail', emailErr.message);
-    }
-
-    res.json({
-      message: 'Purchase order issued successfully',
-      vendorName: quote.vendor.name,
-      price: quote.price,
-      deliveryDays: quote.deliveryDays,
-      emailSent: !!emailResult,
-      etherealUrl: emailResult?.previewUrl || null
+    res.status(201).json({
+      message: `Purchase Order ${po.poNumber} issued successfully`,
+      poNumber: po.poNumber,
+      vendorName: po.vendor?.name || quote.vendor.name,
+      price: po.totalAmount,
+      emailSent: !!po.emailPreviewUrl,
+      etherealUrl: po.emailPreviewUrl || null,
     });
   } catch (err) {
     logger.error('quotes.issuePo', err);
-    res.status(500).json({ error: 'Failed to issue purchase order' });
+    if (err.message?.includes('already exists')) {
+      return res.status(400).json({ error: err.message, alreadyOrdered: true });
+    }
+    res.status(400).json({ error: err.message || 'Failed to issue purchase order' });
   }
 });
 

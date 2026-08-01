@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma');
 const { v4: uuidv4 } = require('uuid');
 const { logActivity } = require('../routes/activityLogs');
 const { sendInvitationEmail, sendQuoteRequestEmail } = require('./emailService');
+const { processRequest: autonomousProcessRequest } = require('./autonomousAgent');
 
 /**
  * SYSTEM PROMPT — Tells Procura everything about the application
@@ -436,6 +437,104 @@ const TOOLS = [
     function: {
       name: 'get_org_report',
       description: 'Get a comprehensive procurement report for the organization — total PRs, budget spent, vendor stats, and recent activity. No user confirmation needed.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_inventory',
+      description: 'Check inventory stock levels for a specific item or get all low-stock alerts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          itemName: {
+            type: 'string',
+            description: 'Item name to check stock for (optional — if omitted, returns all inventory)'
+          },
+          lowStockOnly: {
+            type: 'boolean',
+            description: 'If true, only return items below minimum stock level'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_purchase_orders',
+      description: 'Get purchase orders for the organization. Can filter by status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['PENDING_APPROVAL', 'APPROVED', 'SENT_TO_VENDOR', 'CONFIRMED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
+            description: 'Filter by PO status'
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of results (default 10, max 20)'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_delivery_status',
+      description: 'Check delivery tracking status. Can filter by status or check for overdue deliveries.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['PREPARING', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED'],
+            description: 'Filter by delivery status'
+          },
+          overdue: {
+            type: 'boolean',
+            description: 'If true, only return overdue deliveries'
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of results (default 10, max 20)'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'trigger_autonomous_agent',
+      description: 'Trigger the autonomous procurement agent to process a natural language purchase request. This will automatically parse the request, check inventory, search vendors, and present a recommendation for approval. ONLY call this AFTER the user has explicitly confirmed they want to proceed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          message: {
+            type: 'string',
+            description: 'The natural language purchase request from the user (e.g., "Need 15 Dell laptops for AI Team")'
+          }
+        },
+        required: ['message']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_inventory_alerts',
+      description: 'Get items that are below their minimum stock level and need reordering.',
       parameters: {
         type: 'object',
         properties: {},
@@ -921,8 +1020,12 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         where: { prId: parsed.prId, vendorId: parsed.vendorId }
       });
 
-      if (existingQuote) {
+      // Agent-estimated quotes can be replaced with the real quote
+      if (existingQuote && !existingQuote.notes?.includes('Auto-estimated by Procura')) {
         return JSON.stringify({ error: `${vendor.name} already has a quote for this request.` });
+      }
+      if (existingQuote) {
+        await prisma.quote.delete({ where: { id: existingQuote.id } });
       }
 
       // Create the quote
@@ -1023,6 +1126,159 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
           details: log.details,
           user: log.user.name,
           time: log.createdAt.toISOString()
+        }))
+      });
+    }
+
+    case 'check_inventory': {
+      const invWhere = { organizationId };
+      
+      if (parsed.itemName) {
+        invWhere.itemName = { contains: parsed.itemName, mode: 'insensitive' };
+      }
+
+      const limit = Math.min(parsed.limit || 20, 50);
+      let items = await prisma.inventory.findMany({
+        where: invWhere,
+        orderBy: { itemName: 'asc' },
+        take: limit,
+      });
+
+      if (parsed.lowStockOnly) {
+        items = items.filter(item => item.quantity <= item.minStockLevel);
+      }
+
+      return JSON.stringify({
+        count: items.length,
+        items: items.map(item => ({
+          id: item.id,
+          item: item.itemName,
+          category: item.category,
+          quantity: item.quantity,
+          minStockLevel: item.minStockLevel,
+          lowStock: item.quantity <= item.minStockLevel,
+          unitPrice: item.unitPrice,
+        }))
+      });
+    }
+
+    case 'get_purchase_orders': {
+      const poWhere = { organizationId };
+      if (parsed.status) poWhere.status = parsed.status;
+
+      const poLimit = Math.min(parsed.limit || 10, 20);
+      const orders = await prisma.purchaseOrder.findMany({
+        where: poWhere,
+        include: {
+          purchaseRequest: { select: { itemName: true, category: true } },
+          vendor: { select: { name: true } },
+          delivery: { select: { status: true, trackingNumber: true, estimatedArrival: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: poLimit,
+      });
+
+      return JSON.stringify({
+        count: orders.length,
+        orders: orders.map(po => ({
+          id: po.id,
+          poNumber: po.poNumber,
+          item: po.purchaseRequest?.itemName || 'N/A',
+          vendor: po.vendor?.name || 'N/A',
+          totalAmount: po.totalAmount,
+          status: po.status,
+          expectedDelivery: po.expectedDelivery?.toISOString().split('T')[0] || null,
+          deliveryStatus: po.delivery?.status || null,
+          trackingNumber: po.delivery?.trackingNumber || null,
+          createdAt: po.createdAt.toISOString().split('T')[0],
+        }))
+      });
+    }
+
+    case 'get_delivery_status': {
+      const delWhere = {
+        purchaseOrder: { organizationId }
+      };
+      if (parsed.status) delWhere.status = parsed.status;
+      if (parsed.overdue) {
+        delWhere.status = { notIn: ['DELIVERED', 'FAILED'] };
+        delWhere.estimatedArrival = { lt: new Date() };
+      }
+
+      const delLimit = Math.min(parsed.limit || 10, 20);
+      const deliveries = await prisma.delivery.findMany({
+        where: delWhere,
+        include: {
+          purchaseOrder: {
+            include: {
+              purchaseRequest: { select: { itemName: true, quantity: true } },
+              vendor: { select: { name: true } },
+            }
+          }
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: delLimit,
+      });
+
+      return JSON.stringify({
+        count: deliveries.length,
+        deliveries: deliveries.map(d => ({
+          id: d.id,
+          item: d.purchaseOrder?.purchaseRequest?.itemName || 'N/A',
+          vendor: d.purchaseOrder?.vendor?.name || 'N/A',
+          poNumber: d.purchaseOrder?.poNumber || null,
+          status: d.status,
+          trackingNumber: d.trackingNumber,
+          estimatedArrival: d.estimatedArrival?.toISOString().split('T')[0] || null,
+          actualArrival: d.actualArrival?.toISOString().split('T')[0] || null,
+          overdue: d.estimatedArrival && new Date(d.estimatedArrival) < new Date() && d.status !== 'DELIVERED' && d.status !== 'FAILED',
+        }))
+      });
+    }
+
+    case 'trigger_autonomous_agent': {
+      if (!['officer', 'admin'].includes(userRole)) {
+        return JSON.stringify({ error: 'Only officers and admins can trigger the autonomous agent.' });
+      }
+
+      if (!parsed.message || !parsed.message.trim()) {
+        return JSON.stringify({ error: 'A purchase request message is required.' });
+      }
+
+      const result = await autonomousProcessRequest(parsed.message.trim(), userId, organizationId);
+
+      return JSON.stringify({
+        success: result.success,
+        pipelineId: result.pipelineId,
+        prId: result.prId,
+        message: result.message,
+        needsApproval: result.needsApproval,
+        intent: result.intent,
+        inventoryCheck: result.inventoryCheck,
+        recommendation: result.recommendation ? {
+          explanation: result.recommendation.explanation,
+          fallback: result.recommendation.fallback,
+        } : null,
+      });
+    }
+
+    case 'get_inventory_alerts': {
+      const allItems = await prisma.inventory.findMany({
+        where: { organizationId },
+        orderBy: { quantity: 'asc' },
+      });
+
+      const lowStock = allItems.filter(item => item.quantity <= item.minStockLevel);
+
+      return JSON.stringify({
+        count: lowStock.length,
+        alerts: lowStock.map(item => ({
+          id: item.id,
+          item: item.itemName,
+          category: item.category,
+          quantity: item.quantity,
+          minStockLevel: item.minStockLevel,
+          shortage: item.minStockLevel - item.quantity,
         }))
       });
     }

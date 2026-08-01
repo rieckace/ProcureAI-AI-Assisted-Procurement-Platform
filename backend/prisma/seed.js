@@ -8,6 +8,11 @@ async function main() {
   console.log('');
 
   // ─── Clean existing data (order matters — child tables first) ───
+  await prisma.notification.deleteMany();
+  await prisma.procurementPipeline.deleteMany();
+  await prisma.delivery.deleteMany();
+  await prisma.purchaseOrder.deleteMany();
+  await prisma.inventory.deleteMany();
   await prisma.quoteRequest.deleteMany();
   await prisma.quote.deleteMany();
   await prisma.attachment.deleteMany();
@@ -453,6 +458,81 @@ async function main() {
     }),
   ]);
   console.log(`  ✓ 6 activity logs created`);
+
+  // ─── Inventory Items ───
+  await Promise.all([
+    prisma.inventory.create({
+      data: {
+        itemName: 'Premium Basmati Rice (50kg bags)',
+        category: 'Rice',
+        quantity: 120,
+        minStockLevel: 50,
+        unitPrice: 1425,
+        organizationId: org.id,
+      },
+    }),
+    prisma.inventory.create({
+      data: {
+        itemName: 'Whole Wheat Flour (25kg bags)',
+        category: 'Flour',
+        quantity: 80,
+        minStockLevel: 30,
+        unitPrice: 1150,
+        organizationId: org.id,
+      },
+    }),
+    prisma.inventory.create({
+      data: {
+        itemName: 'Refined Cooking Oil (15L cans)',
+        category: 'Oil',
+        quantity: 45,
+        minStockLevel: 20,
+        unitPrice: 1800,
+        organizationId: org.id,
+      },
+    }),
+    prisma.inventory.create({
+      data: {
+        itemName: 'Rice Packaging Bags (5kg)',
+        category: 'Packaging',
+        quantity: 5000,
+        minStockLevel: 1000,
+        unitPrice: 8,
+        organizationId: org.id,
+      },
+    }),
+    prisma.inventory.create({
+      data: {
+        itemName: 'Industrial Milling Roller',
+        category: 'Equipment',
+        quantity: 3,
+        minStockLevel: 5,
+        unitPrice: 12000,
+        organizationId: org.id,
+      },
+    }),
+    prisma.inventory.create({
+      data: {
+        itemName: 'Mustard Seeds (bulk sack)',
+        category: 'Oil',
+        quantity: 200,
+        minStockLevel: 100,
+        unitPrice: 480,
+        organizationId: org.id,
+      },
+    }),
+    prisma.inventory.create({
+      data: {
+        itemName: 'Flour Sifting Screen Filter',
+        category: 'Equipment',
+        quantity: 8,
+        minStockLevel: 10,
+        unitPrice: 2200,
+        organizationId: org.id,
+      },
+    }),
+  ]);
+  console.log(`  ✓ 7 inventory items created`);
   console.log('');
 
   // ─── Summary ───

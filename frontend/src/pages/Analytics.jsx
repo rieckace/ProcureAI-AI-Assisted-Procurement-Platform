@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import api from '../api';
 import StatusChip from '../components/StatusChip';
+import InsightChips from '../components/InsightChips';
 import { URGENCY_COLORS } from '../constants';
 import { exportToCsv } from '../utils/exportCsv';
 
@@ -121,6 +122,9 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
 
   return (
     <>
+      {/* Auto-generated insights */}
+      <InsightChips data={data} />
+
       {/* Overview Stats */}
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
         {OVERVIEW_CARDS.map((card) => {

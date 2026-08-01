@@ -25,6 +25,9 @@ model Organization {
   notifications    Notification[]
   inviteTokens     InviteToken[]
   quoteRequests    QuoteRequest[]
+  inventoryItems   Inventory[]
+  purchaseOrders   PurchaseOrder[]
+  pipelines        ProcurementPipeline[]
 }
 
 model User {
@@ -49,6 +52,7 @@ model User {
   activityLogs     ActivityLog[]
   attachments      Attachment[]
   notifications    Notification[]
+  pipelines        ProcurementPipeline[]
 }
 
 model Vendor {
@@ -67,6 +71,7 @@ model Vendor {
 
   quotes         Quote[]
   quoteRequests  QuoteRequest[]
+  purchaseOrders PurchaseOrder[]
 
   @@unique([organizationId, email])
 }
@@ -90,6 +95,8 @@ model PurchaseRequest {
   quotes      Quote[]
   attachments Attachment[]
   quoteRequests QuoteRequest[]
+  purchaseOrders PurchaseOrder[]
+  pipelines      ProcurementPipeline[]
 }
 
 model Quote {
@@ -168,6 +175,73 @@ model Notification {
   createdAt      DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+model Inventory {
+  id             String   @id @default(uuid())
+  itemName       String
+  category       String
+  quantity       Int      @default(0)
+  minStockLevel  Int      @default(5)
+  unitPrice      Float?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([itemName, organizationId])
+}
+
+model PurchaseOrder {
+  id                String   @id @default(uuid())
+  poNumber          String   @unique
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest @relation(fields: [purchaseRequestId], references: [id])
+  vendorId          String
+  vendor            Vendor   @relation(fields: [vendorId], references: [id])
+  totalAmount       Float
+  status            String   @default("PENDING_APPROVAL")
+  approvedBy        String?
+  approvedAt        DateTime?
+  sentAt            DateTime?
+  expectedDelivery  DateTime?
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  delivery          Delivery?
+}
+
+model Delivery {
+  id                 String   @id @default(uuid())
+  purchaseOrderId    String   @unique
+  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  status             String   @default("PREPARING")
+  trackingNumber     String?
+  estimatedArrival   DateTime?
+  actualArrival      DateTime?
+  notes              String?
+  reminders          Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ProcurementPipeline {
+  id                String   @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  purchaseRequestId String?
+  purchaseRequest   PurchaseRequest? @relation(fields: [purchaseRequestId], references: [id])
+  status            String   @default("PROCESSING") // PROCESSING, AWAITING_APPROVAL, APPROVED, REJECTED, COMPLETED, FAILED
+  intent            Json?    // Parsed intent from user message
+  recommendation    Json?    // AI recommendation data
+  currentStep       String?  // Which step we're on
+  stepsCompleted    Json?    // Array of completed steps
+  userId            String
+  user              User @relation(fields: [userId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model ActivityLog {
