@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 const STORAGE_DIR = path.join(__dirname, '.auth');
-const API_URL = 'http://localhost:5000';
+const API_URL = 'http://localhost:5001';
 
 setup('authenticate as officer', async ({ page }) => {
   const account = TEST_ACCOUNTS['officer'];

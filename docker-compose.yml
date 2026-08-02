@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: procureai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: procureai
+      POSTGRES_PASSWORD: procureai
+      POSTGRES_DB: procureai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U procureai -d procureai"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  maildev:
+    image: maildev/maildev
+    container_name: procureai-maildev
+    restart: unless-stopped
+    ports:
+      - "1080:1080"
+      - "1025:1025"
+
+  backend:
+    build: ./backend
+    container_name: procureai-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://procureai:procureai@db:5432/procureai
+      FRONTEND_URL: http://localhost:5173
+      SMTP_HOST: maildev
+      SMTP_PORT: 1025
+      MAILDEV_URL: http://localhost:1080
+    ports:
+      - "5001:5001"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: procureai-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  uploads:

@@ -7,15 +7,19 @@ let transporterReady = false;
 
 /**
  * Create a local SMTP transporter using MailDev
- * MailDev runs on localhost:1025 (SMTP) and localhost:1080 (Web UI)
+ * MailDev runs on SMTP_HOST:SMTP_PORT (default localhost:1025)
+ * and its web UI on MAILDEV_URL (default http://localhost:1080)
  */
+const SMTP_HOST = process.env.SMTP_HOST || 'localhost';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '1025', 10);
+
 async function initTransporter() {
   if (transporterReady) return transporter;
 
   try {
     transporter = nodemailer.createTransport({
-      host: 'localhost',
-      port: 1025,
+      host: SMTP_HOST,
+      port: SMTP_PORT,
       secure: false,
       ignoreTLS: true,
       connectionTimeout: 3000,
@@ -24,7 +28,7 @@ async function initTransporter() {
     // Verify the connection actually works
     await transporter.verify();
     transporterReady = true;
-    logger.info('emailService.initMailDev', 'MailDev transporter initialized on localhost:1025');
+    logger.info('emailService.initMailDev', `MailDev transporter initialized on ${SMTP_HOST}:${SMTP_PORT}`);
     return transporter;
   } catch (err) {
     logger.warn('emailService.initMailDev', `MailDev not available (${err.message}). Emails will be logged but not sent.`);
