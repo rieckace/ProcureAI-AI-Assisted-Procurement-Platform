@@ -4,45 +4,106 @@ const { chatCompletions } = require('./modelProvider');
  * Score vendors based on weighted criteria
  * Price: 35%, DeliveryTime: 20%, Reliability: 30%, Rating: 15%
  */
+/**
+ * Score vendors based on weighted criteria.
+ *
+ * Price: 35%
+ * Delivery Time: 20%
+ * Reliability: 30%
+ * Rating: 15%
+ *
+ * Price and delivery use inverse min-max normalization because
+ * lower values are preferred.
+ */
 function scoreVendors(quotes) {
-  if (!quotes || quotes.length === 0) return [];
+  if (!Array.isArray(quotes) || quotes.length === 0) {
+    return [];
+  }
 
-  // Sanitize input — guard against missing fields, zero values, and NaN scores
-  const safeQuotes = quotes.map(q => ({
-    ...q,
-    price: parseFloat(q.price) || 0,
-    deliveryDays: parseInt(q.deliveryDays) || 7,
-    vendor: q.vendor || {
-      id: q.vendorId,
-      name: 'Unknown Vendor',
-      email: null,
-      category: null,
-      onTimeDelivery: 95,
-      defectRate: 1,
-      rating: 4,
-    },
-  }));
+  // Keep only quotations with valid mandatory decision fields.
+  // Missing price or delivery information should not be converted
+  // into artificial values because those values directly affect ranking.
+  const validQuotes = quotes
+    .map(q => ({
+      ...q,
+      price: Number(q.price),
+      deliveryDays: Number(q.deliveryDays),
+      vendor: q.vendor || {
+        id: q.vendorId,
+        name: 'Unknown Vendor',
+        email: null,
+        category: null,
+        onTimeDelivery: 0,
+        defectRate: 100,
+        rating: 0
+      }
+    }))
+    .filter(q =>
+      Number.isFinite(q.price) &&
+      q.price > 0 &&
+      Number.isFinite(q.deliveryDays) &&
+      q.deliveryDays > 0
+    );
 
-  // Find max values for normalization (spread with 0 avoids Math.max() on empty)
-  const maxPrice = Math.max(...safeQuotes.map(q => q.price), 0);
-  const maxDeliveryDays = Math.max(...safeQuotes.map(q => q.deliveryDays), 0);
+  if (validQuotes.length === 0) {
+    return [];
+  }
 
-  const scored = safeQuotes.map(quote => {
+  // Calculate ranges for inverse min-max normalization.
+  const prices = validQuotes.map(q => q.price);
+  const deliveryDays = validQuotes.map(q => q.deliveryDays);
+
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+
+  const minDeliveryDays = Math.min(...deliveryDays);
+  const maxDeliveryDays = Math.max(...deliveryDays);
+
+  const scored = validQuotes.map(quote => {
     const vendor = quote.vendor;
 
-    // Price score - lower price is better (inverse normalized)
-    const priceScore = maxPrice > 0 ? (1 - quote.price / maxPrice) * 35 : 35;
+    // Lower price is better.
+    const priceScore =
+      maxPrice === minPrice
+        ? 1
+        : (maxPrice - quote.price) / (maxPrice - minPrice);
 
-    // Delivery time score - fewer days is better (inverse normalized)
-    const deliveryScore = maxDeliveryDays > 0 ? (1 - quote.deliveryDays / maxDeliveryDays) * 20 : 20;
+    // Lower delivery time is better.
+    const deliveryScore =
+      maxDeliveryDays === minDeliveryDays
+        ? 1
+        : (maxDeliveryDays - quote.deliveryDays) /
+        (maxDeliveryDays - minDeliveryDays);
 
-    // Reliability score - based on onTimeDelivery and defectRate
-    const reliabilityScore = ((vendor.onTimeDelivery / 100) * 0.7 + (1 - vendor.defectRate / 100) * 0.3) * 30;
+    // Reliability combines on-time delivery and defect rate.
+    const onTimeDelivery = Math.min(
+      Math.max(Number(vendor.onTimeDelivery) || 0, 0),
+      100
+    );
 
-    // Rating score - normalized to 15%
-    const ratingScore = (vendor.rating / 5) * 15;
+    const defectRate = Math.min(
+      Math.max(Number(vendor.defectRate) || 0, 0),
+      100
+    );
 
-    const totalScore = Math.round((priceScore + deliveryScore + reliabilityScore + ratingScore) * 100) / 100;
+    const reliabilityScore =
+      0.7 * (onTimeDelivery / 100) +
+      0.3 * (1 - defectRate / 100);
+
+    // Normalize vendor rating from a 5-point scale.
+    const rating = Math.min(
+      Math.max(Number(vendor.rating) || 0, 0),
+      5
+    );
+
+    const ratingScore = rating / 5;
+
+    // Weighted final score.
+    const totalScore =
+      0.35 * priceScore +
+      0.20 * deliveryScore +
+      0.30 * reliabilityScore +
+      0.15 * ratingScore;
 
     return {
       vendorId: vendor.id,
@@ -51,20 +112,24 @@ function scoreVendors(quotes) {
       category: vendor.category,
       price: quote.price,
       deliveryDays: quote.deliveryDays,
-      onTimeDelivery: vendor.onTimeDelivery,
-      defectRate: vendor.defectRate,
-      rating: vendor.rating,
+      onTimeDelivery,
+      defectRate,
+      rating,
+
       scores: {
-        price: Math.round(priceScore * 100) / 100,
-        delivery: Math.round(deliveryScore * 100) / 100,
-        reliability: Math.round(reliabilityScore * 100) / 100,
-        rating: Math.round(ratingScore * 100) / 100,
-        total: totalScore
+        price: Math.round(priceScore * 35 * 100) / 100,
+        delivery: Math.round(deliveryScore * 20 * 100) / 100,
+        reliability:
+          Math.round(reliabilityScore * 30 * 100) / 100,
+        rating:
+          Math.round(ratingScore * 15 * 100) / 100,
+        total:
+          Math.round(totalScore * 10000) / 100
       }
     };
   });
 
-  // Sort by total score descending
+  // Highest total score receives the highest rank.
   return scored.sort((a, b) => b.scores.total - a.scores.total);
 }
 
