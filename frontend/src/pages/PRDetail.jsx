@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { URGENCY_COLORS, CATEGORIES } from '../constants';
 import { getAvatarUrl } from '../utils/avatar';
+import { renderMarkdown } from '../utils/renderMarkdown';
 
 const COMPLETED_STATUSES = ['ordered', 'delivered'];
 
@@ -780,14 +781,12 @@ export default function PRDetail() {
               <SmartToy color="primary" />
               <Typography variant="h6">AI Vendor Recommendation</Typography>
               {aiData.recommendation?.fallback && (
-                <Chip label="Fallback" size="small" color="warning" />
+                <Chip label="Automatic analysis" size="small" color="warning" />
               )}
             </Box>
 
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body1" sx={{ lineHeight: 1.7, color: 'text.primary' }}>
-                {aiData.recommendation?.explanation || 'No recommendation available'}
-              </Typography>
+            <Box sx={{ mb: 2, '& ul, & ol': { my: 0.5 } }}>
+              {renderMarkdown(aiData.recommendation?.explanation || 'No recommendation available')}
             </Box>
 
             <Divider sx={{ my: 2 }} />

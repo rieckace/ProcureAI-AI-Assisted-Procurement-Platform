@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { fireConfetti } from '../utils/confetti';
 import PipelineTimeline from '../components/PipelineTimeline';
 import EmptyState from '../components/EmptyState';
+import { renderMarkdown } from '../utils/renderMarkdown';
 
 const PIPELINE_STATUS_COLORS = {
   PROCESSING: { color: 'info', label: 'Processing' },
@@ -377,9 +378,9 @@ export default function AgentDashboard() {
                   border: '1px solid', borderColor: 'success.main',
                 }}>
                   <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>🤖 AI Recommendation</Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                    {selectedPipeline.recommendation.explanation}
-                  </Typography>
+                  <Box sx={{ '& ul, & ol': { my: 0.5 } }}>
+                    {renderMarkdown(selectedPipeline.recommendation.explanation)}
+                  </Box>
                 </Box>
               )}
 

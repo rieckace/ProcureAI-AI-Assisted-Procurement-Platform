@@ -10,6 +10,7 @@ import {
   TrendingDown, LocalShipping, Star, Shield
 } from '@mui/icons-material';
 import api from '../api';
+import { renderMarkdown } from '../utils/renderMarkdown';
 
 const COMPLETED_STATUSES = ['ordered', 'delivered'];
 
@@ -174,15 +175,15 @@ export default function VendorComparison() {
         <CardContent sx={{ p: 3, pt: 3.5 }}>
           {recommendation?.fallback && (
             <Chip
-              label="Fallback Mode - Groq API not configured"
+              label="Automatic analysis (AI unavailable)"
               size="small"
               color="warning"
               sx={{ mb: 1.5 }}
             />
           )}
-          <Typography variant="body1" sx={{ lineHeight: 1.8, color: 'text.primary', fontSize: '1rem' }}>
-            {recommendation?.explanation || 'No recommendation available'}
-          </Typography>
+          <Box sx={{ '& p': { mb: 1 }, '& ul, & ol': { my: 0.5 } }}>
+            {renderMarkdown(recommendation?.explanation || 'No recommendation available')}
+          </Box>
 
           {topVendor && (
             <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
