@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Alert, IconButton, Tooltip,
-  TextField, InputAdornment, LinearProgress, useTheme, MenuItem
+  TextField, InputAdornment, LinearProgress, useTheme, useMediaQuery, MenuItem
 } from '@mui/material';
 import {
   Search, Visibility, LocalShipping, Receipt,
@@ -15,6 +15,8 @@ import { fireConfetti } from '../utils/confetti';
 import PrintPODialog from '../components/PrintPODialog';
 import EmptyState from '../components/EmptyState';
 import StatusChip from '../components/StatusChip';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { TableSkeleton } from '../components/Skeletons';
 
 // Which PO statuses should pulse (live/in-progress states)
 const LIVE_PO_STATUSES = ['SENT_TO_VENDOR', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'];
@@ -23,6 +25,8 @@ export default function PurchaseOrders() {
   const theme = useTheme();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [confirm, setConfirm] = useState({ open: false, title: '', message: '', confirmLabel: 'Confirm', confirmColor: 'primary', onConfirm: null });
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,28 +60,49 @@ export default function PurchaseOrders() {
     { label: 'Delivered', count: orders.filter(o => o.status === 'DELIVERED').length, color: 'success.main', icon: <CheckCircle /> },
   ];
 
-  const handleApprovePO = async (po) => {
-    if (!window.confirm(`Approve Purchase Order ${po.poNumber}? This will start delivery tracking.`)) return;
-    try {
-      await api.post(`/purchase-orders/${po.id}/approve`);
-      showToast(`PO ${po.poNumber} approved`, 'success');
-      fireConfetti(); // 🎉 PO approved
-      fetchOrders();
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to approve PO', 'error');
-    }
+  const handleApprovePO = (po) => {
+    setConfirm({
+      open: true,
+      title: 'Approve Purchase Order',
+      message: `Approve **${po.poNumber}** from **${po.vendor?.name || 'the vendor'}**? This will start delivery tracking.`,
+      confirmLabel: 'Approve',
+      confirmColor: 'primary',
+      onConfirm: async () => {
+        try {
+          await api.post(`/purchase-orders/${po.id}/approve`);
+          showToast(`PO ${po.poNumber} approved`, 'success');
+          fireConfetti(); // 🎉 PO approved
+          fetchOrders();
+        } catch (err) {
+          showToast(err.response?.data?.error || 'Failed to approve PO', 'error');
+        } finally {
+          setConfirm(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   };
 
-  const handlePOStatusChange = async (po, status, confirmText) => {
-    if (confirmText && !window.confirm(confirmText)) return;
-    try {
-      await api.post(`/purchase-orders/${po.id}/status`, { status });
-      showToast(`PO ${po.poNumber} updated`, 'success');
-      if (status === 'DELIVERED') fireConfetti(); // 🎉 delivery complete
-      fetchOrders();
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to update PO', 'error');
-    }
+  const handlePOStatusChange = (po, status, confirmText) => {
+    if (!confirmText) return;
+    setConfirm({
+      open: true,
+      title: 'Update Purchase Order',
+      message: confirmText,
+      confirmLabel: 'Confirm',
+      confirmColor: 'primary',
+      onConfirm: async () => {
+        try {
+          await api.post(`/purchase-orders/${po.id}/status`, { status });
+          showToast(`PO ${po.poNumber} updated`, 'success');
+          if (status === 'DELIVERED') fireConfetti(); // 🎉 delivery complete
+          fetchOrders();
+        } catch (err) {
+          showToast(err.response?.data?.error || 'Failed to update PO', 'error');
+        } finally {
+          setConfirm(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   };
 
   return (
@@ -87,8 +112,8 @@ export default function PurchaseOrders() {
       {/* Header */}
       <Box sx={{
         background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08), transparent)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06), transparent)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08), transparent)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06), transparent)',
         borderRadius: 3, p: 3, mb: 3, border: '1px solid', borderColor: 'divider',
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
@@ -143,6 +168,42 @@ export default function PurchaseOrders() {
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 1.5 }}>
+            {/* Status quick-chips */}
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label={`Pending: ${orders.filter(o => o.status === 'PENDING_APPROVAL').length}`}
+                color="warning"
+                variant="outlined"
+                onClick={() => setStatusFilter('PENDING_APPROVAL')}
+                sx={{ cursor: 'pointer', fontWeight: 600 }}
+              />
+              <Chip
+                size="small"
+                label={`In Transit: ${orders.filter(o => ['SENT_TO_VENDOR','IN_TRANSIT','OUT_FOR_DELIVERY'].includes(o.status)).length}`}
+                color="primary"
+                variant="outlined"
+                onClick={() => setStatusFilter('IN_TRANSIT')}
+                sx={{ cursor: 'pointer', fontWeight: 600 }}
+              />
+              <Chip
+                size="small"
+                label={`Delivered: ${orders.filter(o => o.status === 'DELIVERED').length}`}
+                color="success"
+                variant="outlined"
+                onClick={() => setStatusFilter('DELIVERED')}
+                sx={{ cursor: 'pointer', fontWeight: 600 }}
+              />
+              <Chip
+                size="small"
+                label={`All: ${orders.length}`}
+                variant="outlined"
+                onClick={() => setStatusFilter('all')}
+                sx={{ cursor: 'pointer', fontWeight: 600 }}
+              />
+            </Box>
+          </Box>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField
               size="small" placeholder="Search POs or items..."
@@ -172,7 +233,9 @@ export default function PurchaseOrders() {
       {/* Table */}
       <Card>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-          {orders.length === 0 ? (
+          {loading ? (
+            <TableSkeleton rows={5} columns={7} />
+          ) : orders.length === 0 ? (
             <EmptyState
               icon={<Receipt sx={{ fontSize: 40 }} />}
               title="No purchase orders yet"
@@ -183,12 +246,12 @@ export default function PurchaseOrders() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell><strong>PO Number</strong></TableCell>
-                    <TableCell><strong>Item</strong></TableCell>
-                    <TableCell><strong>Vendor</strong></TableCell>
-                    <TableCell align="right"><strong>Amount</strong></TableCell>
-                    <TableCell><strong>Status</strong></TableCell>
-                    <TableCell><strong>Delivery</strong></TableCell>
+<TableCell><strong>PO Number</strong></TableCell>
+                  <TableCell><strong>Item</strong></TableCell>
+                  {!isMobile && <TableCell><strong>Vendor</strong></TableCell>}
+                  <TableCell align="right"><strong>Amount</strong></TableCell>
+                  <TableCell><strong>Status</strong></TableCell>
+                  {!isMobile && <TableCell><strong>Delivery</strong></TableCell>}
                     <TableCell align="right"><strong>Actions</strong></TableCell>
                   </TableRow>
                 </TableHead>
@@ -210,26 +273,30 @@ export default function PurchaseOrders() {
                             {po.purchaseRequest?.category}
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">{po.vendor?.name || 'N/A'}</Typography>
-                        </TableCell>
+                        {!isMobile && (
+                          <TableCell>
+                            <Typography variant="body2">{po.vendor?.name || 'N/A'}</Typography>
+                          </TableCell>
+                        )}
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight={600}>
-                            ${po.totalAmount?.toLocaleString() || '0'}
+                            ₹{po.totalAmount?.toLocaleString('en-IN') || '0'}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <StatusChip status={po.status} pulse={LIVE_PO_STATUSES.includes(po.status)} />
                         </TableCell>
-                        <TableCell>
-                          {po.expectedDelivery ? (
-                            <Typography variant="caption" color="text.secondary">
-                              {new Date(po.expectedDelivery).toLocaleDateString()}
-                            </Typography>
-                          ) : (
-                            <Typography variant="caption" color="text.disabled">N/A</Typography>
-                          )}
-                        </TableCell>
+                        {!isMobile && (
+                          <TableCell>
+                            {po.expectedDelivery ? (
+                              <Typography variant="caption" color="text.secondary">
+                                {new Date(po.expectedDelivery).toLocaleDateString()}
+                              </Typography>
+                            ) : (
+                              <Typography variant="caption" color="text.disabled">N/A</Typography>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell align="right">
                           {po.status === 'PENDING_APPROVAL' && (
                             <Button
@@ -320,6 +387,17 @@ export default function PurchaseOrders() {
 
       {/* Print PO Dialog */}
       <PrintPODialog open={Boolean(printPO)} onClose={() => setPrintPO(null)} po={printPO} />
+
+      <ConfirmDialog
+        open={confirm.open}
+        onClose={() => setConfirm(prev => ({ ...prev, open: false }))}
+        onConfirm={confirm.onConfirm}
+        title={confirm.title}
+        message={confirm.message}
+        confirmLabel={confirm.confirmLabel}
+        confirmColor={confirm.confirmColor}
+        severity="info"
+      />
     </Box>
   );
 }

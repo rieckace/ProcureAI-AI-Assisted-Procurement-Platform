@@ -10,8 +10,12 @@ module.exports = {
     fn();
   },
   it: (name, fn) => {
-    // Use Node's test runner
-    test(name, fn);
+    // Use Node's test runner (supports async test fns)
+    test(name, async () => {
+      // Run the beforeEach hook before the test body
+      if (globalThis.__beforeEachFn) globalThis.__beforeEachFn();
+      await fn();
+    });
   },
   expect: (actual) => {
     return {
@@ -25,11 +29,7 @@ module.exports = {
     };
   },
   beforeEach: (fn) => {
-    // Run before each test — we'll handle this in the test files
-    // This is a simplified version
-    const origTest = test;
-    const originalTasks = [];
-    const origFn = globalThis.__beforeEachFn;
+    // Run before each test
     globalThis.__beforeEachFn = fn;
   },
 };

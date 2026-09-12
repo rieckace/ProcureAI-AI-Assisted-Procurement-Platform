@@ -18,7 +18,7 @@ export default function InsightChips({ data }) {
     if (Array.isArray(data.categoryData) && data.categoryData.length > 0) {
       const top = data.categoryData[0];
       if (top && top.budget > 0) {
-        out.push(`“${top.name}” is your largest budget category at $${top.budget.toLocaleString()}.`);
+        out.push(`“${top.name}” is your largest budget category at ₹${top.budget.toLocaleString('en-IN')}.`);
       } else if (top && top.count > 0) {
         out.push(`“${top.name}” is your most-requested category (${top.count} requests).`);
       }
@@ -88,8 +88,8 @@ export default function InsightChips({ data }) {
               fontWeight: 500,
               bgcolor: (theme) =>
                 theme.palette.mode === 'dark'
-                  ? 'rgba(138,180,248,0.08)'
-                  : 'rgba(26,115,232,0.06)',
+                  ? 'rgba(165,180,252,0.08)'
+                  : 'rgba(99,102,241,0.06)',
               color: 'text.primary',
               border: '1px solid',
               borderColor: 'divider',

@@ -19,7 +19,7 @@ export default function VendorQuoteForm() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ price: '', deliveryDays: '', notes: '' });
+  const [form, setForm] = useState({ price: '', unitPrice: '', deliveryDays: '', notes: '' });
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -52,7 +52,10 @@ export default function VendorQuoteForm() {
   const validate = () => {
     const errs = {};
     const price = parseFloat(form.price);
-    if (!form.price || isNaN(price) || price <= 0) errs.price = 'Enter a valid price greater than 0';
+    const unitPrice = parseFloat(form.unitPrice);
+    const hasPrice = form.price && !isNaN(price) && price > 0;
+    const hasUnitPrice = form.unitPrice && !isNaN(unitPrice) && unitPrice > 0;
+    if (!hasPrice && !hasUnitPrice) errs.price = 'Enter a total price or a per-unit price';
     const days = parseInt(form.deliveryDays);
     if (!form.deliveryDays || isNaN(days) || days < 1) errs.deliveryDays = 'Enter delivery days (at least 1)';
     setFormErrors(errs);
@@ -65,11 +68,15 @@ export default function VendorQuoteForm() {
 
     setSubmitting(true);
     try {
-      const res = await api.post(`/quotes/vendor-quote/${token}`, {
-        price: parseFloat(form.price),
+      const payload = {
         deliveryDays: parseInt(form.deliveryDays),
         notes: form.notes || undefined,
-      });
+      };
+      const unitPrice = parseFloat(form.unitPrice);
+      const price = parseFloat(form.price);
+      if (form.unitPrice && !isNaN(unitPrice) && unitPrice > 0) payload.unitPrice = unitPrice;
+      if (form.price && !isNaN(price) && price > 0) payload.price = price;
+      const res = await api.post(`/quotes/vendor-quote/${token}`, payload);
       setSubmitted(true);
       setResult(res.data.quote);
     } catch (err) {
@@ -133,7 +140,7 @@ export default function VendorQuoteForm() {
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">Your Quote</Typography>
                     <Typography variant="h5" fontWeight={700} color="primary.main">
-                      ${result.price.toLocaleString()}
+                      ₹{result.price.toLocaleString('en-IN')}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
@@ -203,12 +210,12 @@ export default function VendorQuoteForm() {
               </Grid>
               <Grid item xs={6} sm={3}>
                 <Typography variant="caption" color="text.secondary">Quantity</Typography>
-                <Typography variant="body2" fontWeight={500}>{pr.quantity} units</Typography>
+                <Typography variant="body2" fontWeight={500}>{pr.quantity} {pr.unit || 'units'}</Typography>
               </Grid>
               <Grid item xs={6} sm={3}>
                 <Typography variant="caption" color="text.secondary">Budget</Typography>
                 <Typography variant="body2" fontWeight={500} color="primary.main">
-                  ${pr.budget.toLocaleString()}
+                  ₹{pr.budget.toLocaleString('en-IN')}
                 </Typography>
               </Grid>
               <Grid item xs={6} sm={3}>
@@ -241,10 +248,10 @@ export default function VendorQuoteForm() {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="Total Price ($)"
+                    label="Total Price (₹)"
                     type="number"
                     value={form.price}
-                    onChange={handleChange('price')}
+                    onChange={(e) => { setForm(p => ({ ...p, price: e.target.value, unitPrice: '' })); if (formErrors.price) setFormErrors(p => ({ ...p, price: '' })); }}
                     error={!!formErrors.price}
                     helperText={formErrors.price}
                     inputProps={{ min: 0, step: 0.01 }}
@@ -264,6 +271,16 @@ export default function VendorQuoteForm() {
                     required
                   />
                 </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label={`Unit Price (₹ per ${pr.unit || 'unit'})`}
+                    type="number"
+                    value={form.unitPrice}
+                    onChange={(e) => { setForm(p => ({ ...p, unitPrice: e.target.value, price: '' })); if (formErrors.price) setFormErrors(p => ({ ...p, price: '' })); }}
+                    inputProps={{ min: 0, step: 0.01 }}
+                  />
+                </Grid>
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
@@ -277,11 +294,15 @@ export default function VendorQuoteForm() {
                 </Grid>
               </Grid>
 
-              {form.price && form.deliveryDays && (
+              {(form.unitPrice || (form.price && form.deliveryDays)) && (
                 <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary">Unit Price</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {pr.quantity} {pr.unit || 'unit'}s
+                  </Typography>
                   <Typography variant="body1" fontWeight={600}>
-                    ${(parseFloat(form.price || 0) / pr.quantity).toFixed(2)} per unit
+                    {form.unitPrice
+                      ? `₹${parseFloat(form.unitPrice).toLocaleString()} × ${pr.quantity} = ₹${(parseFloat(form.unitPrice) * pr.quantity).toLocaleString()} total`
+                      : `₹${(parseFloat(form.price || 0) / pr.quantity).toFixed(2)} per ${pr.unit || 'unit'}`}
                   </Typography>
                 </Box>
               )}

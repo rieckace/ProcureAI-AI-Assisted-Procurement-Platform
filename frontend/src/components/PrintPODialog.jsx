@@ -36,7 +36,7 @@ export default function PrintPODialog({ open, onClose, po }) {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexWrap: 'wrap', gap: 2 }}>
             <Box>
               <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-                Procure<span style={{ color: '#1a73e8' }}>AI</span>
+                Procure<span style={{ color: '#6366f1' }}>AI</span>
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 AI-Powered Procurement System
@@ -89,13 +89,13 @@ export default function PrintPODialog({ open, onClose, po }) {
               <Box>
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>UNIT PRICE</Typography>
                 <Typography variant="body2" fontWeight={600}>
-                  {po.totalAmount && pr.quantity ? `$${(po.totalAmount / pr.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}
+                  {po.totalAmount && pr.quantity ? `₹${(po.totalAmount / pr.quantity).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
                 </Typography>
               </Box>
               <Box>
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>TOTAL</Typography>
                 <Typography variant="body1" fontWeight={800} sx={{ color: 'primary.main' }}>
-                  ${po.totalAmount?.toLocaleString() || '0'}
+                  ₹{po.totalAmount?.toLocaleString('en-IN') || '0'}
                 </Typography>
               </Box>
             </Box>
@@ -116,6 +116,30 @@ export default function PrintPODialog({ open, onClose, po }) {
               <Typography variant="body2">{delivery.trackingNumber || 'Not assigned yet'}</Typography>
             </Box>
           </Box>
+
+          {/* Delivery summary footer */}
+          {delivery.status && (
+            <Box sx={{
+              display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' }, gap: 2,
+              border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, mb: 3,
+              bgcolor: 'action.hover',
+            }}>
+              <Box>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>DELIVERY STATUS</Typography>
+                <Typography variant="body2" fontWeight={600}>
+                  {delivery.status?.replace(/_/g, ' ')}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>TRACKING</Typography>
+                <Typography variant="body2">{delivery.trackingNumber || 'Not assigned yet'}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>ARRIVED</Typography>
+                <Typography variant="body2">{fmt(delivery.actualArrival || (delivery.status === 'DELIVERED' ? delivery.estimatedArrival : null))}</Typography>
+              </Box>
+            </Box>
+          )}
 
           <Box sx={{ borderTop: '2px solid', borderColor: 'divider', pt: 2, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="caption" color="text.disabled">

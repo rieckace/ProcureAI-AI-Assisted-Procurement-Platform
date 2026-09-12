@@ -67,7 +67,7 @@ router.put('/:id/stock', authenticate, authorize('officer', 'admin'), async (req
 // PUT /api/inventory/:id - Update inventory item details
 router.put('/:id', authenticate, authorize('officer', 'admin'), async (req, res) => {
   try {
-    const { itemName, category, minStockLevel, unitPrice } = req.body;
+    const { itemName, category, unit, minStockLevel, unitPrice } = req.body;
     
     const item = await prisma.inventory.findUnique({ where: { id: req.params.id } });
     if (!item || item.organizationId !== req.user.organizationId) {
@@ -79,6 +79,7 @@ router.put('/:id', authenticate, authorize('officer', 'admin'), async (req, res)
       data: {
         itemName: itemName || undefined,
         category: category || undefined,
+        unit: unit || undefined,
         minStockLevel: minStockLevel !== undefined ? parseInt(minStockLevel) : undefined,
         unitPrice: unitPrice !== undefined ? parseFloat(unitPrice) : undefined,
       }

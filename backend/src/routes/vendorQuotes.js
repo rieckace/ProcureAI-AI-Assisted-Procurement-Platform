@@ -62,6 +62,7 @@ router.get('/vendor-quote/:token', async (req, res) => {
         itemName: pr.itemName,
         category: pr.category,
         quantity: pr.quantity,
+        unit: pr.unit || 'unit',
         budget: pr.budget,
         urgency: pr.urgency,
         justification: pr.justification,
@@ -79,14 +80,18 @@ router.get('/vendor-quote/:token', async (req, res) => {
 router.post('/vendor-quote/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    const { price, deliveryDays, notes } = req.body;
+    const { price, unitPrice, deliveryDays, notes } = req.body;
 
-    if (!price || !deliveryDays) {
-      return res.status(400).json({ error: 'Price and delivery days are required' });
+    if ((!price && !unitPrice) || !deliveryDays) {
+      return res.status(400).json({ error: 'Price (or unit price) and delivery days are required' });
     }
 
-    if (parseFloat(price) <= 0) {
+    if (price !== undefined && parseFloat(price) <= 0) {
       return res.status(400).json({ error: 'Price must be greater than 0' });
+    }
+
+    if (unitPrice !== undefined && parseFloat(unitPrice) <= 0) {
+      return res.status(400).json({ error: 'Unit price must be greater than 0' });
     }
 
     if (parseInt(deliveryDays) < 1) {
@@ -103,10 +108,6 @@ router.post('/vendor-quote/:token', async (req, res) => {
 
     if (!quoteRequest) {
       return res.status(404).json({ error: 'Invalid quote request link' });
-    }
-
-    if (quoteRequest.status === 'completed') {
-      return res.status(400).json({ error: 'This quote has already been submitted' });
     }
 
     if (quoteRequest.status === 'cancelled') {
@@ -132,9 +133,26 @@ router.post('/vendor-quote/:token', async (req, res) => {
       return res.status(400).json({ error: 'A quote has already been submitted for this request' });
     }
 
+    // Atomically claim the quote request so two concurrent submissions with the
+    // same token cannot both pass the guards and create duplicate quotes.
+    const claimed = await prisma.quoteRequest.updateMany({
+      where: { id: quoteRequest.id, status: 'sent' },
+      data: { status: 'completed', completedAt: new Date() }
+    });
+
+    if (claimed.count === 0) {
+      return res.status(400).json({ error: 'This quote has already been submitted' });
+    }
+
     // Replace the agent's estimated quote with the vendor's real quote
     if (existingQuote) {
       await prisma.quote.delete({ where: { id: existingQuote.id } });
+    }
+
+    // Per-unit price → total = unitPrice × PR quantity (e.g. 22kg at ₹50/kg = ₹1100)
+    let finalPrice = price !== undefined ? parseFloat(price) : null;
+    if (unitPrice !== undefined) {
+      finalPrice = Math.round(parseFloat(unitPrice) * quoteRequest.purchaseRequest.quantity * 100) / 100;
     }
 
     const quote = await prisma.quote.create({
@@ -142,16 +160,12 @@ router.post('/vendor-quote/:token', async (req, res) => {
         prId: quoteRequest.prId,
         vendorId: quoteRequest.vendorId,
         organizationId: quoteRequest.organizationId,
-        price: parseFloat(price),
+        price: finalPrice,
+        unitPrice: unitPrice !== undefined ? parseFloat(unitPrice) : undefined,
         deliveryDays: parseInt(deliveryDays),
         notes: notes || undefined,
       },
       include: { vendor: true }
-    });
-
-    await prisma.quoteRequest.update({
-      where: { id: quoteRequest.id },
-      data: { status: 'completed', completedAt: new Date() }
     });
 
     const pr = quoteRequest.purchaseRequest;
@@ -162,12 +176,13 @@ router.post('/vendor-quote/:token', async (req, res) => {
       });
     }
 
-    notifyQuoteReceived(pr.id, quote.vendor.name, parseFloat(price));
+    notifyQuoteReceived(pr.id, quote.vendor.name, finalPrice);
 
     logger.info('vendorQuotes.submit', `Quote submitted by ${quoteRequest.vendor.name}`, {
       vendorId: quoteRequest.vendorId,
       prId: quoteRequest.prId,
-      price: price,
+      price: finalPrice,
+      unitPrice: unitPrice,
       deliveryDays: deliveryDays,
     });
 

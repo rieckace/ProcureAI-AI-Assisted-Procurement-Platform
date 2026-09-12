@@ -11,10 +11,12 @@ import {
   ArrowBack, Add, Send, SmartToy, CheckCircle, CompareArrows,
   Edit, Delete, Undo, CloudUpload, AttachFile, Download, NavigateNext,
   MailOutline, Refresh, Schedule, Cancel as CancelIcon, DoneAll,
-  Star, StarBorder, ContentCopy
+  Star, StarBorder, ContentCopy, AttachMoney, TrendingDown, Analytics, Percent
 } from '@mui/icons-material';
 import api from '../api';
 import StatusChip from '../components/StatusChip';
+import ProcurementLifecycleStepper from '../components/ProcurementLifecycleStepper';
+import NextActionBanner from '../components/NextActionBanner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { URGENCY_COLORS, CATEGORIES } from '../constants';
@@ -34,9 +36,11 @@ export default function PRDetail() {
   // Add quote
   const [quoteDialog, setQuoteDialog] = useState(false);
   const [vendors, setVendors] = useState([]);
-  const [quoteForm, setQuoteForm] = useState({ vendorId: '', price: '', deliveryDays: '' });
+  const [quoteForm, setQuoteForm] = useState({ vendorId: '', price: '', unitPrice: '', deliveryDays: '' });
   const [quoteErrors, setQuoteErrors] = useState({});
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [vendorProducts, setVendorProducts] = useState([]);
+  const [vendorProductsLoading, setVendorProductsLoading] = useState(false);
 
   // Issue PO
   const [poDialog, setPoDialog] = useState(false);
@@ -94,15 +98,16 @@ export default function PRDetail() {
   };
 
   const handleCopySummary = () => {
-    const summary = `PR: ${pr?.itemName}\nStatus: ${pr?.status}\nBudget: $${pr?.budget?.toLocaleString()}\nQuantity: ${pr?.quantity} units\nCreated: ${new Date(pr?.createdAt).toLocaleDateString()}`;
+    const summary = `PR: ${pr?.itemName}\nStatus: ${pr?.status}\nBudget: ₹${pr?.budget?.toLocaleString('en-IN')}\nQuantity: ${pr?.quantity} ${pr?.unit || 'units'}\nCreated: ${new Date(pr?.createdAt).toLocaleDateString()}`;
     navigator.clipboard.writeText(summary);
     showToast('PR summary copied to clipboard', 'success');
   };
 
   // Budget utilization
   const getBudgetUtilization = () => {
-    if (!pr?.quotes?.length) return null;
-    const minPrice = Math.min(...pr.quotes.map(q => q.price));
+    const validQuotes = pr?.quotes?.filter(Boolean) || [];
+    if (!validQuotes.length) return null;
+    const minPrice = Math.min(...validQuotes.map(q => q.price));
     return Math.round((minPrice / pr.budget) * 100);
   };
   const budgetUtil = getBudgetUtilization();
@@ -203,8 +208,9 @@ export default function PRDetail() {
   const handleAddQuote = async () => {
     const newErrors = {};
     if (!quoteForm.vendorId) newErrors.vendorId = 'Vendor is required';
-    if (!quoteForm.price) newErrors.price = 'Price is required';
-    else if (parseFloat(quoteForm.price) <= 0) newErrors.price = 'Price must be greater than 0';
+    const hasPrice = quoteForm.price && parseFloat(quoteForm.price) > 0;
+    const hasUnitPrice = quoteForm.unitPrice && parseFloat(quoteForm.unitPrice) > 0;
+    if (!hasPrice && !hasUnitPrice) newErrors.price = 'Enter a total price or unit price';
     if (!quoteForm.deliveryDays) newErrors.deliveryDays = 'Delivery days are required';
     else if (parseInt(quoteForm.deliveryDays) < 1) newErrors.deliveryDays = 'Must be at least 1 day';
     setQuoteErrors(newErrors);
@@ -212,13 +218,20 @@ export default function PRDetail() {
 
     setQuoteLoading(true);
     try {
-      const res = await api.post(`/purchase-requests/${id}/quotes`, quoteForm);
+      const payload = {
+        vendorId: quoteForm.vendorId,
+        deliveryDays: parseInt(quoteForm.deliveryDays),
+      };
+      if (hasUnitPrice) payload.unitPrice = parseFloat(quoteForm.unitPrice);
+      if (hasPrice) payload.price = parseFloat(quoteForm.price);
+      const res = await api.post(`/purchase-requests/${id}/quotes`, payload);
       // Store email in localStorage for EmailPreview
       storeEmailLocally(res.data.etherealUrl, `Quote Request: ${pr?.itemName}`, quoteForm.vendorId);
       showToast('Quote added successfully!');
       setQuoteDialog(false);
-      setQuoteForm({ vendorId: '', price: '', deliveryDays: '' });
+      setQuoteForm({ vendorId: '', price: '', unitPrice: '', deliveryDays: '' });
       setQuoteErrors({});
+      setVendorProducts([]);
       fetchPR();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to add quote', 'error');
@@ -226,6 +239,28 @@ export default function PRDetail() {
       setQuoteLoading(false);
     }
   };
+
+  const handleQuoteVendorChange = async (vendorId) => {
+    setQuoteForm(prev => ({ ...prev, vendorId, price: '', unitPrice: '' }));
+    if (quoteErrors.vendorId) setQuoteErrors(prev => ({ ...prev, vendorId: '' }));
+    if (!vendorId) { setVendorProducts([]); return; }
+    // Load the selected vendor's catalog so the officer can quote from their unit prices
+    setVendorProductsLoading(true);
+    try {
+      const res = await api.get(`/vendors/${vendorId}/products`);
+      setVendorProducts(res.data.data || []);
+    } catch {
+      setVendorProducts([]);
+    } finally {
+      setVendorProductsLoading(false);
+    }
+  };
+
+  // When a unit price is entered, auto-compute the total (22kg × ₹50 = ₹1100)
+  const quoteComputedTotal = (() => {
+    if (!quoteForm.unitPrice || parseFloat(quoteForm.unitPrice) <= 0) return null;
+    return parseFloat(quoteForm.unitPrice) * (pr?.quantity || 1);
+  })();
 
   const handleIssuePO = async () => {
     if (!selectedQuote) return;
@@ -298,7 +333,7 @@ export default function PRDetail() {
     const qty = parseInt(editForm.quantity);
     if (isNaN(qty) || qty < 1) newErrors.quantity = 'Must be at least 1';
     const bud = parseFloat(editForm.budget);
-    if (isNaN(bud) || bud < 1) newErrors.budget = 'Must be at least $1';
+    if (isNaN(bud) || bud < 1) newErrors.budget = 'Must be at least ₹1';
     if (!editForm.urgency) newErrors.urgency = 'Urgency is required';
     setEditErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -502,8 +537,8 @@ export default function PRDetail() {
       <Card sx={{
         mb: 3,
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(0,0,0,0.2) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(255,255,255,0.8) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(0,0,0,0.2) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(255,255,255,0.8) 100%)',
         border: '1px solid',
         borderColor: 'divider',
       }}>
@@ -547,11 +582,11 @@ export default function PRDetail() {
           <Grid container spacing={3} sx={{ mb: 2 }}>
             <Grid item xs={6} sm={3}>
               <Typography variant="caption" color="text.secondary">Quantity</Typography>
-              <Typography variant="body2" fontWeight={600}>{pr.quantity} units</Typography>
+              <Typography variant="body2" fontWeight={600}>{pr.quantity} {pr.unit || 'units'}</Typography>
             </Grid>
             <Grid item xs={6} sm={3}>
               <Typography variant="caption" color="text.secondary">Budget</Typography>
-              <Typography variant="body2" fontWeight={600}>${pr.budget.toLocaleString()}</Typography>
+              <Typography variant="body2" fontWeight={600}>₹{pr.budget.toLocaleString('en-IN')}</Typography>
             </Grid>
             <Grid item xs={6} sm={3}>
               <Typography variant="caption" color="text.secondary">Requester</Typography>
@@ -564,9 +599,8 @@ export default function PRDetail() {
                 <Typography variant="body2">{pr.user?.name || 'N/A'}</Typography>
               </Box>
             </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">Total Quotes</Typography>
-              <Typography variant="body2" fontWeight={600}>{pr.quotes?.length || 0}</Typography>
+            <Grid item xs={6} sm={3}>                <Typography variant="caption" color="text.secondary">Total Quotes</Typography>
+              <Typography variant="body2" fontWeight={600}>{pr.quotes?.filter(Boolean).length || 0}</Typography>
             </Grid>
           </Grid>
 
@@ -575,7 +609,7 @@ export default function PRDetail() {
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography variant="caption" fontWeight={500}>Budget Utilization</Typography>
                 <Typography variant="caption" fontWeight={600} color={budgetUtil > 100 ? 'error.main' : budgetUtil > 80 ? 'warning.main' : 'success.main'}>
-                  {budgetUtil}% (${Math.min(...pr.quotes.map(q => q.price)).toLocaleString()} / ${pr.budget.toLocaleString()})
+                  {budgetUtil}% (₹{Math.min(...(pr.quotes?.filter(Boolean) || []).map(q => q.price)).toLocaleString('en-IN')} / ₹{pr.budget.toLocaleString('en-IN')})
                 </Typography>
               </Box>
               <Box sx={{ width: '100%', bgcolor: 'action.hover', borderRadius: 1, height: 8, overflow: 'hidden' }}>
@@ -604,6 +638,40 @@ export default function PRDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Lifecycle Stepper */}
+      <Card sx={{ mb: 2, overflow: 'visible' }}>
+        <CardContent sx={{ p: { xs: 2, sm: 3 }, '&:last-child': { pb: { xs: 2, sm: 3 } } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography
+              sx={{
+                fontSize: '0.6rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.14em',
+                color: 'text.disabled',
+              }}
+            >
+              Lifecycle
+            </Typography>
+            <StatusChip status={pr.status} />
+          </Box>
+          <ProcurementLifecycleStepper
+            status={pr.status}
+            quoteCount={pr.quotes?.length || 0}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Next Action Banner */}
+      <NextActionBanner
+        pr={pr}
+        isOfficer={isOfficer}
+        quoteCount={pr.quotes?.length || 0}
+        onRequestQuotes={() => { setSelectedVendorIds([]); setSendRequestsResults(null); setSendRequestsDialog(true); fetchQuoteRequests(); }}
+        onCompare={() => navigate(`/pr/${id}/compare`)}
+        onMarkDelivered={() => setDeliverDialog(true)}
+      />
 
       {/* Actions */}
       {isOfficer && (
@@ -752,7 +820,7 @@ export default function PRDetail() {
                           {v.vendorName}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right">${v.price.toLocaleString()}</TableCell>
+                      <TableCell align="right">₹{v.price.toLocaleString('en-IN')}</TableCell>
                       <TableCell align="right">{v.deliveryDays} days</TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" fontWeight={600} color={i === 0 ? 'primary.main' : 'text.primary'}>
@@ -770,7 +838,7 @@ export default function PRDetail() {
                 <Box sx={{ bgcolor: 'success.main', p: 1.5, borderRadius: 2, color: 'white', minWidth: 160 }}>
                   <Typography variant="caption" sx={{ opacity: 0.85 }}>Potential Savings</Typography>
                   <Typography variant="h6" fontWeight={700}>
-                    ${aiData.costAnalysis.potentialSavings.toLocaleString()}
+                    ₹{aiData.costAnalysis.potentialSavings.toLocaleString('en-IN')}
                   </Typography>
                 </Box>
                 <Box sx={{ bgcolor: 'primary.main', p: 1.5, borderRadius: 2, color: 'white', minWidth: 160 }}>
@@ -886,7 +954,42 @@ export default function PRDetail() {
       )}
 
       {/* Quotes */}
-      <Typography variant="h6" sx={{ mb: 2 }}>Quotes ({pr.quotes?.length || 0})</Typography>
+      <Typography variant="h6" sx={{ mb: 1 }}>Quotes ({pr.quotes?.length || 0})</Typography>
+
+      {(pr.quotes?.filter(Boolean).length ?? 0) > 0 && (
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+          <Chip
+            size="small"
+            label={`${pr.quotes.filter(Boolean).length} quote${pr.quotes.filter(Boolean).length !== 1 ? 's' : ''}`}
+            icon={<AttachMoney fontSize="small" />}
+            variant="outlined"
+            sx={{ backgroundColor: 'rgba(99,102,241,0.08)', color: '#6366f1' }}
+          />
+          <Chip
+            size="small"
+            label={`Lowest: ₹${Math.min(...pr.quotes.filter(Boolean).map(q => q.price)).toLocaleString()}`}
+            icon={<TrendingDown fontSize="small" />}
+            variant="outlined"
+            sx={{ backgroundColor: 'rgba(16,185,129,0.08)', color: '#10b981' }}
+          />
+          <Chip
+            size="small"
+            label={`Avg: ₹${Math.round(pr.quotes.filter(Boolean).reduce((a,q) => a + q.price, 0) / pr.quotes.filter(Boolean).length).toLocaleString()}`}
+            icon={<Analytics fontSize="small" />}
+            variant="outlined"
+            sx={{ backgroundColor: 'rgba(245,158,11,0.08)', color: '#f59e0b' }}
+          />
+          {budgetUtil !== null && (
+            <Chip
+              size="small"
+              label={`Budget: ${budgetUtil}%`}
+              icon={<Percent fontSize="small" />}
+              variant="outlined"
+              sx={{ backgroundColor: budgetUtil <= 100 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', color: budgetUtil <= 100 ? '#10b981' : '#ef4444' }}
+            />
+          )}
+        </Box>
+      )}
 
       <Card>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -918,19 +1021,26 @@ export default function PRDetail() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {pr.quotes.map((quote) => (
+                  {pr.quotes?.filter(Boolean).map((quote) => (
                     <TableRow key={quote.id} hover>
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>{quote.vendor?.name}</Typography>
                         <Typography variant="caption" color="text.secondary">{quote.vendor?.email}</Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={600}>${quote.price.toLocaleString()}</Typography>
+                        <Typography variant="body2" fontWeight={600}>₹{quote.price.toLocaleString()}</Typography>
+                        {quote.unitPrice && (
+                          <Typography variant="caption" color="text.secondary">
+                            ₹{quote.unitPrice.toLocaleString()}/{pr.unit || 'unit'}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>{quote.deliveryDays} days</TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          ${(quote.price / pr.quantity).toFixed(2)}/unit
+                          {quote.unitPrice
+                            ? `₹${quote.unitPrice.toLocaleString()}/${pr.unit || 'unit'}`
+                            : `₹${(quote.price / pr.quantity).toFixed(2)}/${pr.unit || 'unit'}`}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -993,7 +1103,7 @@ export default function PRDetail() {
               select
               label="Vendor"
               value={quoteForm.vendorId}
-              onChange={(e) => { setQuoteForm(p => ({ ...p, vendorId: e.target.value })); if (quoteErrors.vendorId) setQuoteErrors(p => ({ ...p, vendorId: '' })); }}
+              onChange={(e) => handleQuoteVendorChange(e.target.value)}
               error={!!quoteErrors.vendorId}
               helperText={quoteErrors.vendorId}
               sx={{ mb: 2 }}
@@ -1004,13 +1114,46 @@ export default function PRDetail() {
                 </MenuItem>
               ))}
             </TextField>
-            <Box sx={{ display: 'flex', gap: 2 }}>
+
+            {vendorProducts.length > 0 && (
+              <Box sx={{ mb: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  {vendorProducts.find(vp => vp.category === pr?.category) ? 'Catalog prices (this category)' : 'Available products'}
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
+                  {vendorProducts
+                    .filter(vp => !pr?.category || vp.category === pr?.category || vendorProducts.length <= 6)
+                    .slice(0, 6)
+                    .map(vp => (
+                      <Chip
+                        key={vp.id}
+                        size="small"
+                        label={`${vp.name}: ₹${vp.unitPrice}/${vp.unit}`}
+                        onClick={() => setQuoteForm(p => ({ ...p, unitPrice: vp.unitPrice.toString(), price: '' }))}
+                        title={`Click to use ₹${vp.unitPrice}/${vp.unit}`}
+                        sx={{ cursor: 'pointer' }}
+                      />
+                    ))}
+                </Box>
+                {vendorProductsLoading && <CircularProgress size={14} sx={{ mt: 1 }} />}
+              </Box>
+            )}
+
+            <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
               <TextField
                 fullWidth
-                label="Price ($)"
+                label={`Unit Price (₹ per ${pr?.unit || 'unit'})`}
+                type="number"
+                value={quoteForm.unitPrice}
+                onChange={(e) => { setQuoteForm(p => ({ ...p, unitPrice: e.target.value, price: '' })); if (quoteErrors.price) setQuoteErrors(p => ({ ...p, price: '' })); }}
+                inputProps={{ min: 0, step: 0.01 }}
+              />
+              <TextField
+                fullWidth
+                label="Total Price (₹)"
                 type="number"
                 value={quoteForm.price}
-                onChange={(e) => { setQuoteForm(p => ({ ...p, price: e.target.value })); if (quoteErrors.price) setQuoteErrors(p => ({ ...p, price: '' })); }}
+                onChange={(e) => { setQuoteForm(p => ({ ...p, price: e.target.value, unitPrice: '' })); if (quoteErrors.price) setQuoteErrors(p => ({ ...p, price: '' })); }}
                 error={!!quoteErrors.price}
                 helperText={quoteErrors.price}
                 inputProps={{ min: 0, step: 0.01 }}
@@ -1026,6 +1169,17 @@ export default function PRDetail() {
                 inputProps={{ min: 1 }}
               />
             </Box>
+
+            {quoteComputedTotal !== null && (
+              <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 2, mb: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {pr?.quantity} {pr?.unit || 'unit'}s × ₹{parseFloat(quoteForm.unitPrice).toLocaleString()}
+                </Typography>
+                <Typography variant="body1" fontWeight={600} color="primary.main">
+                  Total: ₹{quoteComputedTotal.toLocaleString()}
+                </Typography>
+              </Box>
+            )}
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 0 }}>
@@ -1051,7 +1205,7 @@ export default function PRDetail() {
               <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2, mb: 2 }}>
                 <Typography variant="body2" fontWeight={600}>{selectedQuote.vendor?.name}</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Price: <strong>${selectedQuote.price.toLocaleString()}</strong>
+                  Price: <strong>₹{selectedQuote.price.toLocaleString('en-IN')}</strong>
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Delivery: <strong>{selectedQuote.deliveryDays} days</strong>
@@ -1122,7 +1276,7 @@ export default function PRDetail() {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                fullWidth label="Budget ($)" type="number" value={editForm.budget}
+                fullWidth label="Budget (₹)" type="number" value={editForm.budget}
                 onChange={handleEditChange('budget')}
                 error={!!editErrors.budget} helperText={editErrors.budget}
                 inputProps={{ min: 1, step: 0.01 }}
@@ -1172,7 +1326,7 @@ export default function PRDetail() {
         <DialogContent>
           <Typography>
             Are you sure you want to delete the quote from <strong>{quoteToDelete?.vendor?.name}</strong> for{' '}
-            <strong>${quoteToDelete?.price?.toLocaleString()}</strong>?
+            <strong>₹{quoteToDelete?.price?.toLocaleString('en-IN')}</strong>?
           </Typography>
           {pr.quotes?.length === 1 && (
             <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>

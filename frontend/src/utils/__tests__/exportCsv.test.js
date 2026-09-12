@@ -32,7 +32,7 @@ describe('exportToCsv', () => {
     ];
     const columns = [
       { label: 'Item Name', accessor: 'name' },
-      { label: 'Price', accessor: (r) => `$${r.price}` },
+      { label: 'Price', accessor: (r) => `₹${r.price}` },
       { label: 'Quantity', accessor: 'qty' },
     ];
 

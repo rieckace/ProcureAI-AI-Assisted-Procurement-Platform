@@ -1,18 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Alert, IconButton, Tooltip,
   TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions,
-  MenuItem, LinearProgress, useTheme
+  MenuItem, LinearProgress, useTheme, Switch, FormControlLabel
 } from '@mui/material';
 import {
   Add, Edit, Delete, Search, Warning, Inventory2, FilterAltOff,
-  AddCircle, RemoveCircle, Refresh
+  AddCircle, RemoveCircle, Refresh, Download
 } from '@mui/icons-material';
 import api from '../api';
 import { useToast } from '../context/ToastContext';
-import { CATEGORIES } from '../constants';
-import { StatsSkeleton } from '../components/Skeletons';
+import { CATEGORIES, UNITS } from '../constants';
+import EmptyState from '../components/EmptyState';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { formatCompactINR } from '../utils/formatCompact';
+import { exportToCsv } from '../utils/exportCsv';
 
 export default function InventoryPage() {
   const theme = useTheme();
@@ -21,17 +24,19 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [lowStockFilter, setLowStockFilter] = useState(false);
   const [addDialog, setAddDialog] = useState(false);
   const [editDialog, setEditDialog] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ itemName: '', category: 'IT', quantity: 0, minStockLevel: 5, unitPrice: '' });
+  const [form, setForm] = useState({ itemName: '', category: 'Rice', quantity: 0, unit: 'unit', minStockLevel: 5, unitPrice: '' });
   const [formErrors, setFormErrors] = useState({});
   const [stockDialog, setStockDialog] = useState(false);
   const [stockItem, setStockItem] = useState(null);
   const [stockAction, setStockAction] = useState('add');
   const [stockQty, setStockQty] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  const fileInputRef = useRef(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -63,7 +68,7 @@ export default function InventoryPage() {
       await api.post('/inventory', form);
       showToast('Item added to inventory', 'success');
       setAddDialog(false);
-      setForm({ itemName: '', category: 'IT', quantity: 0, minStockLevel: 5, unitPrice: '' });
+      setForm({ itemName: '', category: 'Rice', quantity: 0, unit: 'unit', minStockLevel: 5, unitPrice: '' });
       fetchInventory();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to add item', 'error');
@@ -77,7 +82,19 @@ export default function InventoryPage() {
     setSubmitting(true);
     try {
       await api.put(`/inventory/${stockItem.id}/stock`, { quantity: stockQty, type: stockAction });
-      showToast(`Stock ${stockAction === 'add' ? 'added' : 'deducted'} successfully`, 'success');
+      const undoType = stockAction === 'add' ? 'deduct' : 'add';
+      showToast(`Stock ${stockAction === 'add' ? 'added' : 'deducted'} successfully`, 'success', {
+        label: 'Undo',
+        onClick: async () => {
+          try {
+            await api.put(`/inventory/${stockItem.id}/stock`, { quantity: stockQty, type: undoType });
+            showToast('Stock change undone', 'info');
+            fetchInventory();
+          } catch {
+            showToast('Failed to undo', 'error');
+          }
+        },
+      });
       setStockDialog(false);
       fetchInventory();
     } catch (err) {
@@ -87,14 +104,39 @@ export default function InventoryPage() {
     }
   };
 
-  const handleDelete = async (item) => {
-    if (!window.confirm(`Delete "${item.itemName}" from inventory?`)) return;
+  const handleDelete = (item) => setDeleteTarget(item);
+
+  const performDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    const deleted = deleteTarget;
     try {
-      await api.delete(`/inventory/${item.id}`);
-      showToast('Item deleted', 'success');
+      await api.delete(`/inventory/${deleted.id}`);
+      showToast('Item deleted', 'success', { label: 'Undo', onClick: () => restoreItem(deleted) });
       fetchInventory();
     } catch (err) {
       showToast('Failed to delete item', 'error');
+    } finally {
+      setDeleteLoading(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  // Restore a previously deleted item (undo support)
+  const restoreItem = async (deleted) => {
+    try {
+      await api.post('/inventory', {
+        itemName: deleted.itemName,
+        category: deleted.category,
+        quantity: deleted.quantity,
+        unit: deleted.unit || 'unit',
+        minStockLevel: deleted.minStockLevel || 5,
+        unitPrice: deleted.unitPrice || null,
+      });
+      showToast('Item restored', 'info');
+      fetchInventory();
+    } catch {
+      showToast('Failed to restore item', 'error');
     }
   };
 
@@ -124,8 +166,8 @@ export default function InventoryPage() {
       {/* Header */}
       <Box sx={{
         background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08), transparent)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06), transparent)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08), transparent)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06), transparent)',
         borderRadius: 3, p: 3, mb: 3, border: '1px solid', borderColor: 'divider',
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
@@ -176,7 +218,9 @@ export default function InventoryPage() {
             <Typography variant="body2" color="text.secondary" fontWeight={500} sx={{ mb: 0.5, fontSize: '0.8rem' }}>
               Total Stock Value
             </Typography>
-            <Typography variant="h4" fontWeight={700}>${totalValue.toLocaleString()}</Typography>
+            <Typography variant="h4" fontWeight={700} title={`₹${totalValue.toLocaleString('en-IN')}`}>
+              {formatCompactINR(totalValue)}
+            </Typography>
           </CardContent>
         </Card>
       </Box>
@@ -191,17 +235,51 @@ export default function InventoryPage() {
         </Alert>
       )}
 
-      {/* Search */}
+      {/* Search + Low stock filter */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <TextField
-            size="small" placeholder="Search inventory items..."
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            fullWidth
-            InputProps={{
-              startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
-            }}
-          />
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              size="small" placeholder="Search inventory items..."
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              sx={{ flex: 1, minWidth: 200 }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+              }}
+            />
+            <Tooltip title="Show only items at or below minimum stock level">
+              <FormControlLabel
+                control={<Switch size="small" checked={lowStockFilter} onChange={() => setLowStockFilter(v => !v)} color="warning" />}
+                label="Low stock only"
+                labelPlacement="end"
+              />
+            </Tooltip>
+            <Tooltip title="Export current view to CSV">
+              <Button
+                size="small"
+                startIcon={<Download fontSize="small" />}
+                onClick={() => {
+                  const data = items.filter(item => !lowStockFilter || item.quantity <= item.minStockLevel);
+                  const columns = [
+                    { label: 'Item', accessor: 'itemName' },
+                    { label: 'Category', accessor: 'category' },
+                    { label: 'In Stock', accessor: 'quantity' },
+                    { label: 'Min Level', accessor: 'minStockLevel' },
+                    { label: 'Unit', accessor: 'unit' },
+                    { label: 'Unit Price', accessor: row => `₹${row.unitPrice?.toLocaleString()}` },
+                    { label: 'Total Value', accessor: row => `₹${(row.quantity * (row.unitPrice || 0)).toLocaleString()}` },
+                    { label: 'Status', accessor: row => row.quantity <= row.minStockLevel ? 'LOW STOCK' : 'OK' },
+                    { label: 'Updated', accessor: row => new Date(row.updatedAt).toLocaleDateString() },
+                  ];
+                  exportToCsv(data, columns, `inventory-export-${new Date().toISOString().slice(0,10)}`);
+                  showToast('Inventory exported to CSV', 'success');
+                }}
+                sx={{ borderRadius: 2 }}
+              >
+                Export CSV
+              </Button>
+            </Tooltip>
+          </Box>
         </CardContent>
       </Card>
 
@@ -209,20 +287,16 @@ export default function InventoryPage() {
       <Card>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
           {items.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <Inventory2 sx={{ fontSize: 56, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
-              <Typography variant="h5" color="text.secondary" sx={{ mb: 1 }}>
-                {search ? 'No matching items' : 'No inventory items yet'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {search ? 'Try adjusting your search' : 'Add your first inventory item to start tracking stock'}
-              </Typography>
-              {!search && (
-                <Button variant="contained" startIcon={<Add />} onClick={() => setAddDialog(true)}>
+            <EmptyState
+              icon={<Inventory2 sx={{ fontSize: 40 }} />}
+              title={search ? 'No matching items' : 'No inventory items yet'}
+              description={search ? 'Try adjusting your search' : 'Add your first inventory item to start tracking stock'}
+              action={!search && (
+                <Button variant="contained" startIcon={<Add />} onClick={() => setAddDialog(true)} sx={{ borderRadius: 2 }}>
                   Add Item
                 </Button>
               )}
-            </Box>
+            />
           ) : (
             <TableContainer>
               <Table size="small">
@@ -238,7 +312,7 @@ export default function InventoryPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {items.map((item) => {
+                  {items.filter(item => !lowStockFilter || item.quantity <= item.minStockLevel).map((item) => {
                     const isLowStock = item.quantity <= item.minStockLevel;
                     return (
                       <TableRow key={item.id} hover>
@@ -250,7 +324,7 @@ export default function InventoryPage() {
                         </TableCell>
                         <TableCell align="center">
                           <Chip
-                            label={item.quantity}
+                            label={`${item.quantity} ${item.unit || ''}`}
                             size="small"
                             color={isLowStock && item.quantity === 0 ? 'error' : isLowStock ? 'warning' : 'success'}
                             sx={{ fontWeight: 600, minWidth: 40 }}
@@ -261,36 +335,36 @@ export default function InventoryPage() {
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2">
-                            {item.unitPrice ? `$${item.unitPrice.toLocaleString()}` : '-'}
+                            {item.unitPrice ? `₹${item.unitPrice.toLocaleString('en-IN')}/${item.unit || 'unit'}` : '-'}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight={500}>
-                            {item.unitPrice ? `$${(item.unitPrice * item.quantity).toLocaleString()}` : '-'}
+                            {item.unitPrice ? `₹${(item.unitPrice * item.quantity).toLocaleString('en-IN')}` : '-'}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
                           <Tooltip title="Add Stock">
-                            <IconButton size="small" onClick={() => { setStockItem(item); setStockAction('add'); setStockQty(1); setStockDialog(true); }}>
+                            <IconButton size="small" aria-label={`Add stock to ${item.itemName}`} onClick={() => { setStockItem(item); setStockAction('add'); setStockQty(1); setStockDialog(true); }}>
                               <AddCircle fontSize="small" color="success" />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Remove Stock">
-                            <IconButton size="small" onClick={() => { setStockItem(item); setStockAction('deduct'); setStockQty(1); setStockDialog(true); }}>
+                            <IconButton size="small" aria-label={`Remove stock from ${item.itemName}`} onClick={() => { setStockItem(item); setStockAction('deduct'); setStockQty(1); setStockDialog(true); }}>
                               <RemoveCircle fontSize="small" color="error" />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Edit Item">
-                            <IconButton size="small" onClick={() => {
+                            <IconButton size="small" aria-label={`Edit ${item.itemName}`} onClick={() => {
                               setEditItem(item);
-                              setForm({ itemName: item.itemName, category: item.category, quantity: item.quantity, minStockLevel: item.minStockLevel, unitPrice: item.unitPrice || '' });
+                              setForm({ itemName: item.itemName, category: item.category, quantity: item.quantity, unit: item.unit || 'unit', minStockLevel: item.minStockLevel, unitPrice: item.unitPrice || '' });
                               setEditDialog(true);
                             }}>
                               <Edit fontSize="small" />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Delete">
-                            <IconButton size="small" onClick={() => handleDelete(item)}>
+                            <IconButton size="small" aria-label={`Delete ${item.itemName}`} onClick={() => handleDelete(item)}>
                               <Delete fontSize="small" color="error" />
                             </IconButton>
                           </Tooltip>
@@ -320,9 +394,13 @@ export default function InventoryPage() {
             <TextField label="Initial Quantity" type="number" fullWidth value={form.quantity}
               onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
               error={!!formErrors.quantity} helperText={formErrors.quantity} />
+            <TextField select label="Unit" fullWidth value={form.unit}
+              onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+              {UNITS.map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+            </TextField>
             <TextField label="Minimum Stock Level" type="number" fullWidth value={form.minStockLevel}
               onChange={(e) => setForm({ ...form, minStockLevel: parseInt(e.target.value) || 0 })} />
-            <TextField label="Unit Price ($)" type="number" fullWidth value={form.unitPrice}
+            <TextField label="Unit Price (₹)" type="number" fullWidth value={form.unitPrice}
               onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
           </Box>
         </DialogContent>
@@ -345,9 +423,13 @@ export default function InventoryPage() {
               onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {CATEGORIES.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
             </TextField>
+            <TextField select label="Unit" fullWidth value={form.unit}
+              onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+              {UNITS.map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+            </TextField>
             <TextField label="Minimum Stock Level" type="number" fullWidth value={form.minStockLevel}
               onChange={(e) => setForm({ ...form, minStockLevel: parseInt(e.target.value) || 0 })} />
-            <TextField label="Unit Price ($)" type="number" fullWidth value={form.unitPrice}
+            <TextField label="Unit Price (₹)" type="number" fullWidth value={form.unitPrice}
               onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
           </Box>
         </DialogContent>
@@ -366,7 +448,7 @@ export default function InventoryPage() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {stockItem?.itemName} — Currently: <strong>{stockItem?.quantity}</strong> units
+            {stockItem?.itemName} — Currently: <strong>{stockItem?.quantity} {stockItem?.unit || 'units'}</strong>
           </Typography>
           <TextField
             label="Quantity"
@@ -390,6 +472,18 @@ export default function InventoryPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={performDelete}
+        title="Delete Item"
+        message={`Delete **"${deleteTarget?.itemName}"** from inventory? This will remove it permanently.`}
+        confirmLabel="Delete"
+        confirmColor="error"
+        loading={deleteLoading}
+        severity="error"
+      />
     </Box>
   );
 }

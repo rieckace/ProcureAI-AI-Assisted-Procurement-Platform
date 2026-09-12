@@ -96,6 +96,7 @@ router.post('/:id/send-requests', authenticate, authorize('officer', 'admin'), a
               itemName: pr.itemName,
               category: pr.category,
               quantity: pr.quantity,
+              unit: pr.unit || 'unit',
               budget: pr.budget,
               urgency: pr.urgency,
               justification: pr.justification,
@@ -142,6 +143,7 @@ router.post('/:id/send-requests', authenticate, authorize('officer', 'admin'), a
             itemName: pr.itemName,
             category: pr.category,
             quantity: pr.quantity,
+            unit: pr.unit || 'unit',
             budget: pr.budget,
             urgency: pr.urgency,
             justification: pr.justification,
@@ -250,6 +252,7 @@ router.post('/:id/resend-request/:requestId', authenticate, authorize('officer',
           itemName: quoteRequest.purchaseRequest.itemName,
           category: quoteRequest.purchaseRequest.category,
           quantity: quoteRequest.purchaseRequest.quantity,
+          unit: quoteRequest.purchaseRequest.unit || 'unit',
           budget: quoteRequest.purchaseRequest.budget,
           urgency: quoteRequest.purchaseRequest.urgency,
           justification: quoteRequest.purchaseRequest.justification,
@@ -363,7 +366,7 @@ router.delete('/:prId/quotes/:quoteId', authenticate, authorize('officer', 'admi
       });
     }
 
-    logActivity(req.user.id, 'deleted_quote', 'PurchaseRequest', quote.prId, `Deleted quote from ${quote.vendor.name}: $${quote.price}`, req.user.organizationId);
+    logActivity(req.user.id, 'deleted_quote', 'PurchaseRequest', quote.prId, `Deleted quote from ${quote.vendor.name}: ₹${quote.price}`, req.user.organizationId);
 
     res.json({ message: 'Quote deleted', remainingQuotes });
   } catch (err) {
@@ -375,23 +378,36 @@ router.delete('/:prId/quotes/:quoteId', authenticate, authorize('officer', 'admi
 // POST /api/purchase-requests/:id/quotes - Add quote (officers/admin only)
 router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (req, res) => {
   try {
-    const { vendorId, price, deliveryDays } = req.body;
+    const { vendorId, price, unitPrice, deliveryDays } = req.body;
 
-    if (!vendorId || !price || !deliveryDays) {
-      return res.status(400).json({ error: 'Vendor, price, and delivery days are required' });
+    if (!vendorId || (!price && !unitPrice) || !deliveryDays) {
+      return res.status(400).json({ error: 'Vendor, price (or unit price), and delivery days are required' });
     }
 
-    if (parseFloat(price) <= 0) {
+    const pr = await prisma.purchaseRequest.findUnique({
+      where: { id: req.params.id }
+    });
+
+    // If a per-unit price is provided, compute the total from the PR quantity.
+    // e.g. PR of 22kg at ₹50/kg → total ₹1100 (22 units of that good).
+    let finalPrice = parseFloat(price);
+    if (unitPrice !== undefined) {
+      if (parseFloat(unitPrice) <= 0) {
+        return res.status(400).json({ error: 'Unit price must be greater than 0' });
+      }
+      if (!pr) {
+        return res.status(404).json({ error: 'Purchase request not found' });
+      }
+      finalPrice = Math.round(parseFloat(unitPrice) * pr.quantity * 100) / 100;
+    }
+
+    if (finalPrice <= 0) {
       return res.status(400).json({ error: 'Price must be greater than 0' });
     }
 
     if (parseInt(deliveryDays) < 1) {
       return res.status(400).json({ error: 'Delivery days must be at least 1' });
     }
-
-    const pr = await prisma.purchaseRequest.findUnique({
-      where: { id: req.params.id }
-    });
 
     if (!pr || pr.organizationId !== req.user.organizationId) {
       return res.status(404).json({ error: 'Purchase request not found' });
@@ -405,7 +421,7 @@ router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (r
       where: { id: vendorId }
     });
 
-    if (!vendor) {
+    if (!vendor || vendor.organizationId !== req.user.organizationId) {
       return res.status(404).json({ error: 'Vendor not found' });
     }
 
@@ -426,7 +442,8 @@ router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (r
       data: {
         prId: req.params.id,
         vendorId,
-        price: parseFloat(price),
+        price: finalPrice,
+        unitPrice: unitPrice !== undefined ? parseFloat(unitPrice) : undefined,
         deliveryDays: parseInt(deliveryDays),
         organizationId: req.user.organizationId
       },
@@ -441,9 +458,9 @@ router.post('/:id/quotes', authenticate, authorize('officer', 'admin'), async (r
       });
     }
 
-    logActivity(req.user.id, 'added_quote', 'PurchaseRequest', req.params.id, `Added quote from ${vendor.name}: $${price}`, req.user.organizationId);
+    logActivity(req.user.id, 'added_quote', 'PurchaseRequest', req.params.id, `Added quote from ${vendor.name}: ₹${finalPrice}`, req.user.organizationId);
 
-    notifyQuoteReceived(req.params.id, vendor.name, parseFloat(price));
+    notifyQuoteReceived(req.params.id, vendor.name, finalPrice);
 
     res.status(201).json({
       quote,
@@ -522,8 +539,8 @@ router.get('/:id/recommendation', authenticate, async (req, res) => {
         cheapestPrice,
         potentialSavings: Math.round(Math.max(0, potentialSavings) * 100) / 100,
         budgetComparison: topPrice <= pr.budget
-          ? `$${(pr.budget - topPrice).toLocaleString()} under budget`
-          : `$${(topPrice - pr.budget).toLocaleString()} over budget`
+          ? `₹${(pr.budget - topPrice).toLocaleString('en-IN')} under budget`
+          : `₹${(topPrice - pr.budget).toLocaleString('en-IN')} over budget`
       }
     });
   } catch (err) {

@@ -1,4 +1,5 @@
 const { chatCompletions } = require('./modelProvider');
+const { formatINR } = require('../lib/format');
 
 /**
  * Score vendors based on weighted criteria
@@ -50,6 +51,7 @@ function scoreVendors(quotes) {
       vendorEmail: vendor.email,
       category: vendor.category,
       price: quote.price,
+      unitPrice: quote.unitPrice || null,
       deliveryDays: quote.deliveryDays,
       onTimeDelivery: vendor.onTimeDelivery,
       defectRate: vendor.defectRate,
@@ -82,21 +84,21 @@ PURCHASE REQUEST DETAILS:
 - Item: ${purchaseRequest.itemName}
 - Category: ${purchaseRequest.category}
 - Quantity: ${purchaseRequest.quantity}
-- Budget: $${purchaseRequest.budget}
+- Budget: ${formatINR(purchaseRequest.budget)}
 - Urgency: ${purchaseRequest.urgency}
 - Justification: ${purchaseRequest.justification || 'N/A'}
 
 VENDOR RANKINGS (sorted by score):
 
 ${scoredVendors.map((v, i) => `#${i + 1} ${v.vendorName}
-   - Price: $${v.price} (Score: ${v.scores.price}/35)
+   - Price: ${formatINR(v.price)} (Score: ${v.scores.price}/35)
    - Delivery: ${v.deliveryDays} days (Score: ${v.scores.delivery}/20)
    - On-Time Delivery: ${v.onTimeDelivery}% | Defect Rate: ${v.defectRate}%
    - Rating: ${v.rating}/5 (Score: ${v.scores.rating}/15)
    - Total Score: ${v.scores.total}/100`).join('\n\n')}
 
 ${secondVendor ? `COST SAVINGS ANALYSIS (Top vs Second Best):
-- Price difference: $${Math.abs(topVendor.price - secondVendor.price)}
+- Price difference: ${formatINR(Math.abs(topVendor.price - secondVendor.price))}
 - Delivery time difference: ${Math.abs(topVendor.deliveryDays - secondVendor.deliveryDays)} days` : ''}
 
 Please provide:
@@ -139,11 +141,11 @@ function generateFallbackRecommendation(purchaseRequest, scoredVendors) {
 
   const top = scoredVendors[0];
   const budgetStr = top.price <= purchaseRequest.budget
-    ? `$${purchaseRequest.budget - top.price} under budget`
-    : `$${top.price - purchaseRequest.budget} over budget`;
+    ? `${formatINR(purchaseRequest.budget - top.price)} under budget`
+    : `${formatINR(top.price - purchaseRequest.budget)} over budget`;
 
   return `${top.vendorName} is the top recommended vendor with a score of ${top.scores.total}/100. ` +
-    `They offer the best balance of price ($${top.price}), delivery (${top.deliveryDays} days), ` +
+    `They offer the best balance of price (${formatINR(top.price)}), delivery (${top.deliveryDays} days), ` +
     `and reliability (${top.onTimeDelivery}% on-time delivery, ${top.defectRate}% defect rate). ` +
     `This quote is ${budgetStr}. Consider their proven track record and competitive pricing.`;
 }

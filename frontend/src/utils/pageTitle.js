@@ -7,6 +7,7 @@ const TITLE_MAP = {
   '/new-request': 'New Request',
   '/manage-vendors': 'Vendor Management',
   '/add-vendor': 'Add Vendor',
+  '/manage-vendors/:id': 'Vendor Catalog',
   '/analytics': 'Analytics',
   '/activity-log': 'Activity Log',
   '/profile': 'Profile',
@@ -27,6 +28,8 @@ export function updatePageTitle(pathname) {
   // Check prefix matches
   if (pathname.startsWith('/pr/') && pathname.endsWith('/compare')) {
     document.title = 'Vendor Comparison — ProcureAI';
+  } else if (pathname.startsWith('/manage-vendors/')) {
+    document.title = 'Vendor Catalog — ProcureAI';
   } else if (pathname.startsWith('/pr/')) {
     document.title = 'Request Details — ProcureAI';
   } else if (pathname.startsWith('/accept-invite')) {

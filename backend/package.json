@@ -6,6 +6,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "seed": "node prisma/seed.js",
+    "test": "node --test src/middleware/__tests__/auth.test.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {

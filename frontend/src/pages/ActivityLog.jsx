@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, CardContent, CircularProgress, Alert, Pagination,
-  Avatar, Chip, IconButton, Tooltip, Button, Skeleton
+  Avatar, Chip, IconButton, Tooltip, Button, Skeleton, FormControl, InputLabel, Select, MenuItem, TextField, InputAdornment
 } from '@mui/material';
 import {
   ArrowBack, Add, Edit, Delete, ShoppingCart, Cancel, CheckCircle,
-  Email, PersonAdd, History, Inbox
+  Email, PersonAdd, History, Inbox, Search
 } from '@mui/icons-material';
 import api from '../api';
 import { getAvatarUrl } from '../utils/avatar';
@@ -14,10 +14,10 @@ import { timeAgo } from '../utils/timeAgo';
 
 const actionConfig = {
   created: { icon: <Add fontSize="small" />, color: 'success.main', bg: 'rgba(46,125,50,0.12)', label: 'Created' },
-  updated: { icon: <Edit fontSize="small" />, color: 'primary.main', bg: 'rgba(26,115,232,0.12)', label: 'Updated' },
-  status_changed: { icon: <CheckCircle fontSize="small" />, color: 'warning.main', bg: 'rgba(249,171,0,0.12)', label: 'Status Changed' },
+  updated: { icon: <Edit fontSize="small" />, color: 'primary.main', bg: 'rgba(99,102,241,0.12)', label: 'Updated' },
+  status_changed: { icon: <CheckCircle fontSize="small" />, color: 'warning.main', bg: 'rgba(245,158,11,0.12)', label: 'Status Changed' },
   cancelled: { icon: <Cancel fontSize="small" />, color: 'error.main', bg: 'rgba(234,67,53,0.12)', label: 'Cancelled' },
-  added_quote: { icon: <ShoppingCart fontSize="small" />, color: 'primary.main', bg: 'rgba(26,115,232,0.12)', label: 'Quote Added' },
+  added_quote: { icon: <ShoppingCart fontSize="small" />, color: 'primary.main', bg: 'rgba(99,102,241,0.12)', label: 'Quote Added' },
   deleted_quote: { icon: <Delete fontSize="small" />, color: 'error.main', bg: 'rgba(234,67,53,0.12)', label: 'Quote Deleted' },
   issued_po: { icon: <CheckCircle fontSize="small" />, color: 'success.main', bg: 'rgba(46,125,50,0.12)', label: 'PO Issued' },
   invited_user: { icon: <PersonAdd fontSize="small" />, color: 'secondary.main', bg: 'rgba(147,52,230,0.12)', label: 'User Invited' },
@@ -34,6 +34,8 @@ export default function ActivityLog() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [actionFilter, setActionFilter] = useState('all');
+  const [keywordSearch, setKeywordSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +92,8 @@ export default function ActivityLog() {
       {/* Header Banner */}
       <Box sx={{
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(129,140,248,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.03) 100%)',
         borderRadius: 3,
         p: 3,
         mb: 3,
@@ -142,7 +144,41 @@ export default function ActivityLog() {
       ) : (
         <Card>
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-            {logs.map((log, index) => {
+            {/* Filters */}
+            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider' }}>
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel id="action-filter-label">Action</InputLabel>
+                <Select
+                  labelId="action-filter-label"
+                  value={actionFilter}
+                  label="Action"
+                  onChange={(e) => setActionFilter(e.target.value)}
+                >
+                  <MenuItem value="all">All Actions</MenuItem>
+                  {Object.keys(actionConfig).map(a => (
+                    <MenuItem key={a} value={a}>{actionConfig[a].label || a}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                size="small"
+                placeholder="Search keyword…"
+                value={keywordSearch}
+                onChange={(e) => setKeywordSearch(e.target.value)}
+                sx={{ minWidth: 240 }}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+                }}
+              />
+            </Box>
+            {logs
+              .filter(log => (actionFilter === 'all' || log.action === actionFilter))
+              .filter(log => !keywordSearch || 
+                (log.action?.toLowerCase().includes(keywordSearch.toLowerCase())) ||
+                (log.user?.name?.toLowerCase().includes(keywordSearch.toLowerCase())) ||
+                (log.details?.toLowerCase().includes(keywordSearch.toLowerCase()))
+              )
+              .map((log, index) => {
               const config = actionConfig[log.action] || { icon: <History fontSize="small" />, color: 'text.secondary', bg: 'action.hover', label: log.action };
               return (
                 <Box

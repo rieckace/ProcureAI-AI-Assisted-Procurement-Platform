@@ -80,10 +80,8 @@ export default function AnimatedCounter({
   }, [hasAnimated, value, duration]);
 
   const formattedValue = format === 'currency'
-    ? `$${displayValue.toLocaleString()}`
-    : format === 'number'
-      ? displayValue.toLocaleString()
-      : displayValue.toLocaleString();
+    ? `₹${displayValue.toLocaleString('en-IN')}`
+    : displayValue.toLocaleString('en-IN');
 
   return (
     <Typography

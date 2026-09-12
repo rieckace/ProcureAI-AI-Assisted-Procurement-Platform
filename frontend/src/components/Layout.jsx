@@ -37,6 +37,7 @@ const PAGE_TITLES = {
   '/new-request': 'New Purchase Request',
   '/manage-vendors': 'Vendor Management',
   '/add-vendor': 'Add Vendor',
+  '/manage-vendors/:id': 'Vendor Catalog',
   '/analytics': 'Analytics',
   '/activity-log': 'Activity Log',
   '/admin': 'Admin Panel',
@@ -155,6 +156,7 @@ export default function Layout() {
   const getPageTitle = () => {
     const title = PAGE_TITLES[location.pathname];
     if (title) return title;
+    if (location.pathname.startsWith('/manage-vendors/')) return 'Vendor Catalog';
     if (location.pathname.startsWith('/pr/')) return 'Request Details';
     if (location.pathname.startsWith('/pr/') && location.pathname.endsWith('/compare')) return 'Vendor Comparison';
     if (location.pathname.startsWith('/accept-invite')) return 'Accept Invitation';
@@ -184,40 +186,83 @@ export default function Layout() {
   const firstName = user?.name?.split(' ')[0] || '';
   const greetingEmoji = hour < 12 ? '☀️' : hour < 18 ? '🌤️' : '🌙';
 
-  const navItems = [];
+  const navSections = [];
   if (user?.role === 'manager') {
-    navItems.push(
-      { text: 'My Requests', icon: <Dashboard />, path: '/manager-dashboard', badge: true },
-      { text: 'New Request', icon: <Add />, path: '/new-request', tour: 'new-request' },
-      { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
-    );
+    navSections.push({
+      title: 'Procurement',
+      tagline: 'Plan, source & finalize',
+      items: [
+        { text: 'My Requests', icon: <Dashboard />, path: '/manager-dashboard', badge: true },
+        { text: 'New Request', icon: <Add />, path: '/new-request', tour: 'new-request' },
+      ],
+    });
+    navSections.push({
+      title: 'Intelligence',
+      tagline: 'AI, data & insights',
+      items: [
+        { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
+      ],
+    });
   }
   if (user?.role === 'officer') {
-    navItems.push(
-      { text: 'All Requests', icon: <Dashboard />, path: '/officer-dashboard', badge: true },
-      { text: 'Vendors', icon: <Store />, path: '/manage-vendors' },
-      { text: 'Inventory', icon: <Inventory2 />, path: '/inventory' },
-      { text: 'Purchase Orders', icon: <Receipt />, path: '/purchase-orders' },
-      { text: 'Deliveries', icon: <LocalShipping />, path: '/deliveries' },
-      { text: 'Procura Agent', icon: <SmartToy />, path: '/agent' },
-      { text: 'Activity Log', icon: <History />, path: '/activity-log' },
-      { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
-    );
+    navSections.push({
+      title: 'Procurement',
+      tagline: 'Plan, source & finalize',
+      items: [
+        { text: 'All Requests', icon: <Dashboard />, path: '/officer-dashboard', badge: true },
+        { text: 'Purchase Orders', icon: <Receipt />, path: '/purchase-orders' },
+        { text: 'Deliveries', icon: <LocalShipping />, path: '/deliveries' },
+      ],
+    });
+    navSections.push({
+      title: 'Operations',
+      tagline: 'Vendors, stock & orders',
+      items: [
+        { text: 'Vendors', icon: <Store />, path: '/manage-vendors' },
+        { text: 'Inventory', icon: <Inventory2 />, path: '/inventory' },
+      ],
+    });
+    navSections.push({
+      title: 'Intelligence',
+      tagline: 'AI, data & insights',
+      items: [
+        { text: 'Procura Agent', icon: <SmartToy />, path: '/agent' },
+        { text: 'Activity Log', icon: <History />, path: '/activity-log' },
+        { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
+      ],
+    });
   }
   if (user?.role === 'admin') {
-    navItems.push(
-      { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' },
-      { text: 'Manager View', icon: <Dashboard />, path: '/manager-dashboard', badge: true },
-      { text: 'Officer View', icon: <Store />, path: '/officer-dashboard', badge: true },
-      { text: 'Inventory', icon: <Inventory2 />, path: '/inventory' },
-      { text: 'Purchase Orders', icon: <Receipt />, path: '/purchase-orders' },
-      { text: 'Deliveries', icon: <LocalShipping />, path: '/deliveries' },
-      { text: 'Procura Agent', icon: <SmartToy />, path: '/agent' },
-      { text: 'Avatar Studio', icon: <SmartToy />, path: '/avatar-studio' },
-      { text: 'Activity Log', icon: <History />, path: '/activity-log' },
-      { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
-    );
+    navSections.push({
+      title: 'Administration',
+      tagline: 'Workspace & access',
+      items: [
+        { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' },
+        { text: 'Manager View', icon: <Dashboard />, path: '/manager-dashboard', badge: true },
+        { text: 'Officer View', icon: <Store />, path: '/officer-dashboard', badge: true },
+      ],
+    });
+    navSections.push({
+      title: 'Operations',
+      tagline: 'Vendors, stock & orders',
+      items: [
+        { text: 'Inventory', icon: <Inventory2 />, path: '/inventory' },
+        { text: 'Purchase Orders', icon: <Receipt />, path: '/purchase-orders' },
+        { text: 'Deliveries', icon: <LocalShipping />, path: '/deliveries' },
+      ],
+    });
+    navSections.push({
+      title: 'Intelligence',
+      tagline: 'AI, data & insights',
+      items: [
+        { text: 'Procura Agent', icon: <SmartToy />, path: '/agent' },
+        { text: 'Avatar Studio', icon: <SmartToy />, path: '/avatar-studio' },
+        { text: 'Activity Log', icon: <History />, path: '/activity-log' },
+        { text: 'Analytics', icon: <BarChart />, path: '/analytics' },
+      ],
+    });
   }
+  const navItems = navSections.flatMap((s) => s.items);
 
   const drawer = (
     <Box
@@ -235,8 +280,8 @@ export default function Layout() {
         sx={{
           height: 3,
           background: (theme) => theme.palette.mode === 'dark'
-            ? 'linear-gradient(90deg, #8ab4f8 0%, #669df6 50%, #8ab4f8 100%)'
-            : 'linear-gradient(90deg, #1a73e8 0%, #1557b0 50%, #1a73e8 100%)',
+            ? 'linear-gradient(90deg, #818cf8 0%, #6366f1 50%, #818cf8 100%)'
+            : 'linear-gradient(90deg, #6366f1 0%, #4f46e5 50%, #6366f1 100%)',
           flexShrink: 0,
         }}
       />          {/* Logo Area — ProcureAI brand only, premium look */}
@@ -268,6 +313,7 @@ export default function Layout() {
           <Tooltip title="Collapse sidebar" arrow>
             <IconButton
               size="small"
+              aria-label="Collapse sidebar"
               onClick={toggleSidebar}
               sx={{
                 color: 'text.secondary',
@@ -319,81 +365,115 @@ export default function Layout() {
         '&::-webkit-scrollbar-track': { background: 'transparent' },
         '&::-webkit-scrollbar-thumb': { background: 'rgba(0,0,0,0.08)', borderRadius: 2 },
       }}>
-        {navItems.map((item, idx) => (
-          <ListItem key={item.text} disablePadding sx={{ mb: 0.2, animation: isCollapsed ? 'none' : `fadeIn 0.2s ease ${idx * 0.03}s both` }}>
-            <Tooltip title={isCollapsed ? item.text : ''} arrow placement="right">
-              <ListItemButton
-                selected={location.pathname === item.path}
-                onClick={() => {
-                  navigate(item.path);
-                  setMobileOpen(false);
-                }}
-                {...(item.tour ? { 'data-tour': item.tour } : {})}
+        {navSections.map((section, si) => (
+          <Box key={section.title}>
+            {si > 0 && <Box sx={{ my: 0.6, mx: isCollapsed ? 1.2 : 1.5, height: '1px', borderRadius: 1, background: (theme) => `linear-gradient(90deg, ${theme.palette.divider}, transparent)` }} />}
+            {!isCollapsed && (
+              <Typography
                 sx={{
-                  borderRadius: 1,
-                  mx: isCollapsed ? 0.3 : 0.5,
-                  py: 1,
-                  px: isCollapsed ? 0 : 1.5,
-                  justifyContent: isCollapsed ? 'center' : 'flex-start',
-                  minHeight: 42,
-                  transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-                  '&.Mui-selected': {
-                    backgroundColor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(138,180,248,0.15)'
-                      : 'rgba(26,115,232,0.1)',
-                    color: 'primary.main',
-                    '&:hover': {
-                      backgroundColor: (theme) => theme.palette.mode === 'dark'
-                        ? 'rgba(138,180,248,0.2)'
-                        : 'rgba(26,115,232,0.15)',
-                    },
-                    '& .MuiListItemIcon-root': { color: 'primary.main' },
-                  },
-                  '&:hover:not(.Mui-selected)': {
-                    backgroundColor: 'action.hover',
-                  },
+                  px: 1.8,
+                  pt: si === 0 ? 0 : 1.4,
+                  pb: 0.4,
+                  fontSize: '0.55rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.14em',
+                  color: 'text.disabled',
                 }}
               >
-                <ListItemIcon
-                  sx={{
-                    minWidth: isCollapsed ? 0 : 34,
-                    color: location.pathname === item.path ? 'primary.main' : 'text.secondary',
-                    justifyContent: 'center',
-                    fontSize: isCollapsed ? '1.2rem' : '1rem',
-                  }}
-                >
-                  {item.badge ? (
-                    <Badge
-                      badgeContent={pendingCount}
-                      color="error"
-                      overlap="circular"
-                      sx={{
-                        '& .MuiBadge-badge': {
-                          fontSize: '0.45rem',
-                          minWidth: 10,
-                          height: 10,
-                          fontWeight: 700,
+                {section.title}
+              </Typography>
+            )}
+            {!isCollapsed && (
+              <Typography
+                sx={{
+                  display: 'block',
+                  pl: 1.8,
+                  pb: 0.6,
+                  fontSize: '0.6rem',
+                  color: 'text.disabled',
+                }}
+              >
+                {section.tagline}
+              </Typography>
+            )}
+            {section.items.map((item, idx) => (
+              <ListItem key={item.text} disablePadding sx={{ mb: 0.2, animation: isCollapsed ? 'none' : `fadeIn 0.2s ease ${idx * 0.03}s both` }}>
+                <Tooltip title={isCollapsed ? item.text : ''} arrow placement="right">
+                  <ListItemButton
+                    selected={location.pathname === item.path}
+                    onClick={() => {
+                      navigate(item.path);
+                      setMobileOpen(false);
+                    }}
+                    {...(item.tour ? { 'data-tour': item.tour } : {})}
+                    sx={{
+                      borderRadius: 1.5,
+                      mx: isCollapsed ? 0.3 : 0.5,
+                      py: 1,
+                      px: isCollapsed ? 0 : 1.5,
+                      justifyContent: isCollapsed ? 'center' : 'flex-start',
+                      minHeight: 42,
+                      transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&.Mui-selected': {
+                        backgroundColor: (theme) => theme.palette.mode === 'dark'
+                          ? 'rgba(129,140,248,0.16)'
+                          : 'rgba(79,70,229,0.12)',
+                        color: 'primary.main',
+                        '&:hover': {
+                          backgroundColor: (theme) => theme.palette.mode === 'dark'
+                            ? 'rgba(129,140,248,0.24)'
+                            : 'rgba(79,70,229,0.16)',
                         },
+                        '& .MuiListItemIcon-root': { color: 'primary.main' },
+                      },
+                      '&:hover:not(.Mui-selected)': {
+                        backgroundColor: 'action.hover',
+                      },
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: isCollapsed ? 0 : 34,
+                        color: location.pathname === item.path ? 'primary.main' : 'text.secondary',
+                        justifyContent: 'center',
+                        fontSize: isCollapsed ? '1.2rem' : '1rem',
                       }}
                     >
-                      {item.icon}
-                    </Badge>
-                  ) : (
-                    item.icon
-                  )}
-                </ListItemIcon>
-                {!isCollapsed && (
-                  <ListItemText
-                    primary={item.text}
-                    primaryTypographyProps={{
-                      fontSize: '0.8rem',
-                      fontWeight: location.pathname === item.path ? 600 : 500,
-                    }}
-                  />
-                )}
-              </ListItemButton>
-            </Tooltip>
-          </ListItem>
+                      {item.badge ? (
+                        <Badge
+                          badgeContent={pendingCount}
+                          color="error"
+                          overlap="circular"
+                          sx={{
+                            '& .MuiBadge-badge': {
+                              fontSize: '0.45rem',
+                              minWidth: 10,
+                              height: 10,
+                              fontWeight: 700,
+                            },
+                          }}
+                        >
+                          {item.icon}
+                        </Badge>
+                      ) : (
+                        item.icon
+                      )}
+                    </ListItemIcon>
+                    {!isCollapsed && (
+                      <ListItemText
+                        primary={item.text}
+                        primaryTypographyProps={{
+                          fontSize: '0.8rem',
+                          fontWeight: location.pathname === item.path ? 600 : 500,
+                        }}
+                      />
+                    )}
+                  </ListItemButton>
+                </Tooltip>
+              </ListItem>
+            ))}
+          </Box>
         ))}
       </List>
 
@@ -401,12 +481,12 @@ export default function Layout() {
       {isCollapsed ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1.5, gap: 1, borderTop: '1px solid', borderColor: 'divider' }}>
           <Tooltip title="Expand sidebar" arrow placement="right">
-            <IconButton size="small" onClick={toggleSidebar} sx={{ color: 'text.secondary', opacity: 0.6, '&:hover': { opacity: 1 } }}>
+            <IconButton size="small" aria-label="Expand sidebar" onClick={toggleSidebar} sx={{ color: 'text.secondary', opacity: 0.6, '&:hover': { opacity: 1 } }}>
               <ChevronRight fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title={user?.name || 'User'} arrow placement="right">
-            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
+            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small" aria-label="Account menu">
               <Avatar src={getAvatarUrl(user?.name, 26)} alt={user?.name || 'User avatar'} sx={{ width: 26, height: 26 }} />
             </IconButton>
           </Tooltip>
@@ -529,6 +609,8 @@ export default function Layout() {
           {/* Mobile hamburger */}
           <IconButton
             edge="start"
+            aria-label="Open navigation menu"
+            aria-expanded={mobileOpen}
             onClick={() => setMobileOpen(!mobileOpen)}
             sx={{ display: { md: 'none' }, mr: 1, color: 'text.secondary' }}
           >
@@ -538,6 +620,7 @@ export default function Layout() {
           {/* Desktop sidebar toggle */}
           <IconButton
             edge="start"
+            aria-label="Toggle sidebar"
             onClick={toggleSidebar}
             sx={{ display: { xs: 'none', md: 'flex' }, mr: 1, color: 'text.secondary', width: 36, height: 36 }}
           >
@@ -604,8 +687,8 @@ export default function Layout() {
                   fontWeight: 600,
                   fontSize: { xs: '0.65rem', sm: '0.72rem' },
                   background: (theme) => theme.palette.mode === 'dark'
-                    ? 'linear-gradient(135deg, #aecbfa, #81c995)'
-                    : 'linear-gradient(135deg, #1a73e8, #188038)',
+                    ? 'linear-gradient(135deg, #a5b4fc, #34d399)'
+                    : 'linear-gradient(135deg, #6366f1, #10b981)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -620,10 +703,21 @@ export default function Layout() {
 
           {/* Right actions */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title="New request" arrow>
+              <IconButton
+                size="small"
+                aria-label="New request"
+                onClick={() => navigate('/new-request')}
+                sx={{ display: { xs: 'inline-flex', md: 'none' }, color: 'text.secondary', mr: 0.25 }}
+              >
+                <Add fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <NotificationBell />
             <Tooltip title="Toggle theme" arrow>
               <IconButton
                 size="small"
+                aria-label="Toggle theme"
                 data-tour="theme"
                 onClick={() => {
                   setThemeSpinning(true);
@@ -641,6 +735,7 @@ export default function Layout() {
             <Tooltip title={user?.name || 'Account'} arrow>
               <IconButton
                 size="small"
+                aria-label="Account menu"
                 onClick={(e) => setAnchorEl(e.currentTarget)}
                 sx={{ ml: 0.3 }}
               >
@@ -686,25 +781,8 @@ export default function Layout() {
           {/* Only render user menu in desktop drawer to avoid duplicates */}
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper', overflow: 'hidden' }}>
             {/* Logo Area — Mobile: ProcureAI only */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, height: 56, borderBottom: '1px solid', borderColor: 'divider', minHeight: 56 }}>
-              <Box
-                sx={{
-                  width: 28, height: 28, borderRadius: 0.8,
-                  background: 'linear-gradient(135deg, #1a73e8, #1557b0)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '0.8rem' }}>P</Typography>
-              </Box>
-              <Box>
-                <Typography sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.9rem', lineHeight: 1.2 }}>
-                  ProcureAI
-                </Typography>
-                <Typography sx={{ fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.2 }}>
-                  AI Procurement System
-                </Typography>
-              </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', px: 2, height: 56, borderBottom: '1px solid', borderColor: 'divider', minHeight: 56 }}>
+              <Logo size={28} withWordmark wordmarkSize="0.9rem" />
             </Box>
             <List sx={{ flex: 1, px: 1, pt: 0.5, overflow: 'auto' }}>
               {navItems.map((item) => (
@@ -712,8 +790,14 @@ export default function Layout() {
                   <ListItemButton
                     selected={location.pathname === item.path}
                     onClick={() => { navigate(item.path); setMobileOpen(false); }}
-                    sx={{ borderRadius: 0, py: 1, px: 1.5, minHeight: 44,
-                      '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' }, '& .MuiListItemIcon-root': { color: 'primary.contrastText' } },
+                    sx={{ borderRadius: 1.5, mx: 0.5, py: 1, px: 1.5, minHeight: 44,
+                      transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&.Mui-selected': {
+                        backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(129,140,248,0.16)' : 'rgba(79,70,229,0.12)',
+                        color: 'primary.main',
+                        '&:hover': { backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(129,140,248,0.24)' : 'rgba(79,70,229,0.16)' },
+                        '& .MuiListItemIcon-root': { color: 'primary.main' },
+                      },
                       '&:hover:not(.Mui-selected)': { bgcolor: 'action.hover' } }}
                   >
                     <ListItemIcon sx={{ minWidth: 36, color: 'text.secondary' }}>
@@ -785,8 +869,8 @@ export default function Layout() {
           zIndex: 0,
           opacity: 0.3,
           background: (theme) => theme.palette.mode === 'dark'
-            ? 'radial-gradient(ellipse at 20% 50%, rgba(138,180,248,0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(138,180,248,0.05) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(138,180,248,0.04) 0%, transparent 50%)'
-            : 'radial-gradient(ellipse at 20% 50%, rgba(26,115,232,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(26,115,232,0.04) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(26,115,232,0.03) 0%, transparent 50%)',
+            ? 'radial-gradient(ellipse at 20% 50%, rgba(129,140,248,0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(129,140,248,0.05) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(129,140,248,0.04) 0%, transparent 50%)'
+            : 'radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.04) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(99,102,241,0.03) 0%, transparent 50%)',
           animation: 'gradientShift 20s ease-in-out infinite',
           backgroundSize: '200% 200%',
         }}
@@ -820,7 +904,7 @@ export default function Layout() {
         onClose={() => setAnchorEl(null)}
         transformOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'top' }}
-        PaperProps={{ sx: { borderRadius: 0, minWidth: 180 } }}
+        PaperProps={{ sx: { borderRadius: 12, minWidth: 180, mt: 0.5, boxShadow: (theme) => theme.palette.mode === 'dark' ? '0 8px 30px rgba(0,0,0,0.5)' : '0 12px 32px rgba(15,23,42,0.12)' } }}
       >
         <MenuItem disabled sx={{ opacity: 0.7 }}>
           <Typography variant="body2" color="text.secondary">{user?.email}</Typography>

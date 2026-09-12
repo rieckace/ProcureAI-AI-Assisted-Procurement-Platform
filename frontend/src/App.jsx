@@ -1,7 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ToastProvider } from './context/ToastContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import BrandSplash from './components/BrandSplash';
@@ -15,6 +15,7 @@ const PRDetail = lazy(() => import('./pages/PRDetail'));
 const VendorComparison = lazy(() => import('./pages/VendorComparison'));
 const AddVendor = lazy(() => import('./pages/AddVendor'));
 const VendorManagement = lazy(() => import('./pages/VendorManagement'));
+const VendorDetail = lazy(() => import('./pages/VendorDetail'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const ActivityLog = lazy(() => import('./pages/ActivityLog'));
 const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
@@ -92,6 +93,11 @@ function AppRoutes() {
             <LazyPage Component={VendorManagement} />
           </ProtectedRoute>
         } />
+        <Route path="/manage-vendors/:id" element={
+          <ProtectedRoute roles={['officer', 'admin']}>
+            <LazyPage Component={VendorDetail} />
+          </ProtectedRoute>
+        } />
         <Route path="/admin" element={
           <ProtectedRoute roles={['admin']}>
             <LazyPage Component={AdminPanel} />
@@ -132,10 +138,26 @@ function AppRoutes() {
   );
 }
 
+function OfflineDetector() {
+  const { showToast } = useToast();
+  useEffect(() => {
+    const goOffline = () => showToast('No internet connection — changes may not be saved', 'error');
+    const backOnline = () => showToast('You are back online', 'success');
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', backOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', backOnline);
+    };
+  }, [showToast]);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <OfflineDetector />
         <AppRoutes />
       </ToastProvider>
     </AuthProvider>

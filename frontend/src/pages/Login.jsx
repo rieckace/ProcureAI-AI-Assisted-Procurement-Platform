@@ -11,13 +11,8 @@ import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
 import Logo from '../components/Logo';
 import AnimatedCounter from '../components/AnimatedCounter';
+import CapsLockHint, { getCapsLock } from '../components/CapsLockHint';
 import api from '../api';
-
-const demoCredentials = [
-  { role: 'Admin', email: 'pashupati@shivnathmill.com', color: 'rgba(26,115,232,0.15)', textColor: 'primary.main' },
-  { role: 'Officer', email: 'ravi@shivnathmill.com', color: 'rgba(52,168,83,0.15)', textColor: 'success.main' },
-  { role: 'Manager', email: 'rikesh@shivnathmill.com', color: 'rgba(249,171,0,0.15)', textColor: 'warning.main' },
-];
 
 const ROLE_REDIRECTS = {
   admin: '/admin',
@@ -32,6 +27,7 @@ export default function Login() {
   const { login, register } = useAuth();
   const [tab, setTab] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
@@ -44,6 +40,7 @@ export default function Login() {
   const [orgInputValue, setOrgInputValue] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const searchTimerRef = useRef(null);
+  const mountedRef = useRef(false);
   const [form, setForm] = useState({
     name: '', email: '', password: '',
     organizationName: '', organizationSlug: '',
@@ -55,6 +52,15 @@ export default function Login() {
     setOrgName('');
     setOrgInputValue('');
   }, [tab]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // A pending debounced org search must never fire state updates after unmount.
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -76,17 +82,18 @@ export default function Login() {
   // Debounced search for organizations
   const searchOrganizations = useCallback(async (query) => {
     if (!query || query.length < 1) {
-      setOrgSuggestions([]);
+      if (mountedRef.current) setOrgSuggestions([]);
       return;
     }
     setOrgSearchLoading(true);
     try {
       const res = await api.get(`/auth/orgs/search?q=${encodeURIComponent(query)}`);
+      if (!mountedRef.current) return;
       setOrgSuggestions(res.data.organizations || []);
     } catch {
-      setOrgSuggestions([]);
+      if (mountedRef.current) setOrgSuggestions([]);
     } finally {
-      setOrgSearchLoading(false);
+      if (mountedRef.current) setOrgSearchLoading(false);
     }
   }, []);
 
@@ -160,6 +167,12 @@ export default function Login() {
     { icon: <Security sx={{ fontSize: 20 }} />, title: 'Secure Role-Based Access', desc: 'Admins, officers, and managers — each with the right view.' },
   ];
 
+  const demoCredentials = [
+    { role: 'Admin', email: 'pashupati@shivnathmill.com', color: 'rgba(99,102,241,0.15)', textColor: 'primary.main', dot: '#6366f1' },
+    { role: 'Officer', email: 'ravi@shivnathmill.com', color: 'rgba(16,185,129,0.15)', textColor: 'success.main', dot: '#10b981' },
+    { role: 'Manager', email: 'rikesh@shivnathmill.com', color: 'rgba(245,158,11,0.15)', textColor: 'warning.main', dot: '#f59e0b' },
+  ];
+
   return (
     <Box
       sx={{
@@ -170,8 +183,8 @@ export default function Login() {
         position: 'relative',
         overflow: 'hidden',
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #121212 0%, #1a1a2e 50%, #16213e 100%)'
-          : 'linear-gradient(135deg, #f5f7fa 0%, #e8edf5 50%, #e3eaf8 100%)',
+          ? 'linear-gradient(135deg, #0b0f19 0%, #141b2e 50%, #1a2236 100%)'
+          : 'linear-gradient(135deg, #eef1fb 0%, #f6f7fb 50%, #e8ecfa 100%)',
         p: 2,
         '&::before': {
           content: '""',
@@ -181,8 +194,8 @@ export default function Login() {
           width: '200%',
           height: '200%',
           background: (theme) => theme.palette.mode === 'dark'
-            ? 'radial-gradient(circle at 30% 40%, rgba(138,180,248,0.06) 0%, transparent 50%), radial-gradient(circle at 70% 60%, rgba(138,180,248,0.04) 0%, transparent 50%)'
-            : 'radial-gradient(circle at 30% 40%, rgba(26,115,232,0.08) 0%, transparent 50%), radial-gradient(circle at 70% 60%, rgba(26,115,232,0.05) 0%, transparent 50%)',
+            ? 'radial-gradient(circle at 30% 40%, rgba(165,180,252,0.06) 0%, transparent 50%), radial-gradient(circle at 70% 60%, rgba(165,180,252,0.04) 0%, transparent 50%)'
+            : 'radial-gradient(circle at 30% 40%, rgba(99,102,241,0.08) 0%, transparent 50%), radial-gradient(circle at 70% 60%, rgba(99,102,241,0.05) 0%, transparent 50%)',
           animation: 'gradientShift 15s ease infinite',
           backgroundSize: '200% 200%',
           pointerEvents: 'none',
@@ -202,8 +215,15 @@ export default function Login() {
         }}
       >
         {/* ─── Brand Panel (desktop) ─── */}
-        <Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' }, px: { md: 3, lg: 6 } }}>
-          <Box sx={{ maxWidth: 440, animation: visible ? 'fadeInUp 0.6s ease 0.05s both' : 'none' }}>
+        <Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' }, px: { md: 3, lg: 6 }, position: 'relative' }}>
+          {/* Animated orbs — brand canvas */}
+          <Box sx={{ position: 'absolute', top: -70, left: -50, width: 240, height: 240, borderRadius: '50%', background: isDark
+            ? 'radial-gradient(circle, rgba(165,180,252,0.16) 0%, transparent 65%)'
+            : 'radial-gradient(circle, rgba(99,102,241,0.14) 0%, transparent 65%)', animation: 'blob 18s ease-in-out infinite' }} />
+          <Box sx={{ position: 'absolute', bottom: -90, right: -30, width: 200, height: 200, borderRadius: '50%', background: isDark
+            ? 'radial-gradient(circle, rgba(52,211,153,0.12) 0%, transparent 65%)'
+            : 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 65%)', animation: 'blob 24s ease-in-out infinite reverse' }} />
+          <Box sx={{ position: 'relative', zIndex: 1, maxWidth: 440, animation: visible ? 'fadeInUp 0.6s ease 0.05s both' : 'none' }}>
             <Logo size={48} withWordmark wordmarkSize="1.4rem" />
             <Typography
               variant="h2"
@@ -213,8 +233,8 @@ export default function Login() {
               <Box component="span" sx={{
                 display: 'block',
                 background: isDark
-                  ? 'linear-gradient(135deg, #aecbfa 0%, #81c995 100%)'
-                  : 'linear-gradient(135deg, #1a73e8 0%, #34a853 100%)',
+                  ? 'linear-gradient(135deg, #a5b4fc 0%, #34d399 100%)'
+                  : 'linear-gradient(135deg, #6366f1 0%, #10b981 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
@@ -244,7 +264,7 @@ export default function Login() {
                     width: 40, height: 40, borderRadius: 2, flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'primary.main',
-                    bgcolor: isDark ? 'rgba(138,180,248,0.1)' : 'rgba(26,115,232,0.08)',
+                    bgcolor: isDark ? 'rgba(165,180,252,0.1)' : 'rgba(99,102,241,0.08)',
                     border: '1px solid',
                     borderColor: 'divider',
                   }}>
@@ -286,20 +306,35 @@ export default function Login() {
             sx={{
               maxWidth: 460,
               width: '100%',
-              overflow: 'visible',
+              overflow: 'hidden',
               borderRadius: 3,
+              position: 'relative',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: '15%',
+                right: '15%',
+                height: 3,
+                borderRadius: '0 0 10px 10px',
+                background: 'linear-gradient(90deg, #6366f1 0%, #10b981 50%, #6366f1 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'gradientShift 8s ease infinite',
+                zIndex: 1,
+              },
               opacity: visible ? 1 : 0,
               transform: visible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.97)',
               transition: 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
               boxShadow: visible
                 ? (theme) => theme.palette.mode === 'dark'
-                  ? '0 16px 48px rgba(0,0,0,0.45)'
-                  : '0 16px 48px rgba(26,115,232,0.12)'
+                  ? '0 20px 50px rgba(0,0,0,0.5)'
+                  : '0 20px 50px rgba(99,102,241,0.14)'
                 : 'none',
-              backdropFilter: 'blur(12px)',
+              backdropFilter: 'blur(14px)',
+              border: (theme) => `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)'}`,
               bgcolor: (theme) => theme.palette.mode === 'dark'
-                ? 'rgba(32,33,36,0.85)'
-                : 'rgba(255,255,255,0.82)',
+                ? 'rgba(17,24,39,0.9)'
+                : 'rgba(255,255,255,0.85)',
             }}
           >
         {/* Logo Header (mobile) */}
@@ -358,14 +393,32 @@ export default function Login() {
                     label={`${cred.role}: ${cred.email}`}
                     size="small"
                     onClick={() => fillDemo(cred.email)}
+                    icon={
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          bgcolor: cred.dot,
+                          boxShadow: `0 0 0 3px ${cred.dot}33`,
+                          ml: '6px !important',
+                        }}
+                      />
+                    }
                     sx={{
                       backgroundColor: cred.color,
                       color: cred.textColor,
-                      fontWeight: 500,
+                      fontWeight: 600,
                       cursor: 'pointer',
+                      border: '1px solid',
+                      borderColor: `${cred.dot}55`,
                       transition: 'all 0.2s ease',
-                      '&:hover': { opacity: 0.8, transform: 'translateY(-1px)' },
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: `0 6px 16px ${cred.dot}2e`,
+                      },
                       fontSize: '0.75rem',
+                      '& .MuiChip-label': { pl: 1 },
                     }}
                   />
                 ))}
@@ -382,7 +435,7 @@ export default function Login() {
               severity="error"
               sx={{
                 mb: 2, borderRadius: 2,
-                animation: 'fadeInUp 0.3s ease',
+                animation: 'shake 0.4s cubic-bezier(.36,.07,.19,.97), fadeInUp 0.3s ease',
               }}
             >
               {error}
@@ -514,8 +567,8 @@ export default function Login() {
                     fontWeight: 600,
                     animation: visible ? 'fadeInUp 0.35s ease 0.3s both' : 'none',
                     background: (theme) => theme.palette.mode === 'dark'
-                      ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-                      : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
+                      ? 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)'
+                      : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                   }}
                 >
                   {orgSlugLookupLoading ? <CircularProgress size={24} sx={{ color: 'white' }} /> :
@@ -597,6 +650,8 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={handleChange('password')}
+                  onKeyDown={(e) => setCapsLock(getCapsLock(e))}
+                  onKeyUp={(e) => setCapsLock(getCapsLock(e))}
                   required
                   sx={{ mb: 3, animation: visible ? 'fadeInUp 0.35s ease 0.25s both' : 'none' }}
                   InputProps={{
@@ -612,6 +667,7 @@ export default function Login() {
                     ),
                   }}
                 />
+                <CapsLockHint active={capsLock} />
               </>
             )}
 
@@ -638,6 +694,8 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={handleChange('password')}
+                  onKeyDown={(e) => setCapsLock(getCapsLock(e))}
+                  onKeyUp={(e) => setCapsLock(getCapsLock(e))}
                   required
                   sx={{ mb: 1, animation: visible ? 'fadeInUp 0.35s ease 0.35s both' : 'none' }}
                   InputProps={{
@@ -653,6 +711,7 @@ export default function Login() {
                     ),
                   }}
                 />
+                <CapsLockHint active={capsLock} />
               </>
             )}
 
@@ -714,12 +773,12 @@ export default function Login() {
                   fontWeight: 600,
                   animation: visible ? 'fadeInUp 0.35s ease 0.3s both' : 'none',
                   background: (theme) => theme.palette.mode === 'dark'
-                    ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-                    : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
+                    ? 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)'
+                    : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                   '&:hover': {
                     background: (theme) => theme.palette.mode === 'dark'
-                      ? 'linear-gradient(135deg, #aecbfa 0%, #8ab4f8 100%)'
-                      : 'linear-gradient(135deg, #1557b0 0%, #124896 100%)',
+                      ? 'linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%)'
+                      : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
                   },
                 }}
               >
@@ -727,6 +786,22 @@ export default function Login() {
                  tab === 0 ? 'Sign In' : 'Create Account'}
               </Button>
             )}
+          </Box>
+
+          {/* Trust row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2.5, mt: 3, opacity: 0.85 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+              <Lock sx={{ fontSize: 14, color: 'text.disabled' }} />
+              <Typography variant="caption" color="text.disabled">256-bit secure</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+              <Security sx={{ fontSize: 14, color: 'text.disabled' }} />
+              <Typography variant="caption" color="text.disabled">Role-based access</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+              <Speed sx={{ fontSize: 14, color: 'text.disabled' }} />
+              <Typography variant="caption" color="text.disabled">AI-powered</Typography>
+            </Box>
           </Box>
         </CardContent>
         </Card>

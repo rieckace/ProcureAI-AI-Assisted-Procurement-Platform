@@ -14,6 +14,7 @@ import {
   Zoom,
 } from "@mui/material";
 import { SmartToy, Close, Send, DeleteSweep } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../api";
 
@@ -99,7 +100,7 @@ function renderMarkdown(text) {
 
     if (/^>\s?/.test(line)) {
       flushList();
-      blocks.push(`<blockquote style="border-left:3px solid #1a73e8;margin:4px 0;padding:2px 10px;opacity:0.85">${inline(line.replace(/^>\s?/, ""))}</blockquote>`);
+      blocks.push(`<blockquote style="border-left:3px solid #6366f1;margin:4px 0;padding:2px 10px;opacity:0.85">${inline(line.replace(/^>\s?/, ""))}</blockquote>`);
       continue;
     }
 
@@ -285,6 +286,7 @@ const KEYBOARD_SHORTCUT =
 
 export default function ChatWidget() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [initialLoading, setInitialLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -302,6 +304,8 @@ export default function ChatWidget() {
   const fabRef = useRef(null);
   const mountedRef = useRef(true);
   const streamTimerRef = useRef(null);
+  const apiTimeoutRef = useRef(null);
+  const redirectTimerRef = useRef(null);
 
   // Load chat history on mount
   useEffect(() => {
@@ -404,6 +408,9 @@ export default function ChatWidget() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (streamTimerRef.current) clearTimeout(streamTimerRef.current);
+      if (apiTimeoutRef.current) clearTimeout(apiTimeoutRef.current);
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
     };
   }, []);
 
@@ -472,9 +479,12 @@ export default function ChatWidget() {
 
       try {
         // Create a timeout promise (60 seconds — backend tries multiple fallback models)
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Chat request timed out")), 60000),
-        );
+        const timeoutPromise = new Promise((_, reject) => {
+          apiTimeoutRef.current = setTimeout(
+            () => reject(new Error("Chat request timed out")),
+            60000,
+          );
+        });
 
         // Race between API call and timeout
         const res = await Promise.race([
@@ -484,6 +494,10 @@ export default function ChatWidget() {
           }),
           timeoutPromise,
         ]);
+        if (apiTimeoutRef.current) {
+          clearTimeout(apiTimeoutRef.current);
+          apiTimeoutRef.current = null;
+        }
 
         // Start typewriter streaming for the assistant response
         const streamId = nextId();
@@ -499,12 +513,18 @@ export default function ChatWidget() {
           setShowSuggestions(true);
         }
 
-        if (res.data.navigate) {
-          setTimeout(() => {
-            window.location.href = res.data.navigate.path;
+        if (res.data.navigate && mountedRef.current) {
+          redirectTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) navigate(res.data.navigate.path);
+            redirectTimerRef.current = null;
           }, 1500);
         }
       } catch {
+        if (apiTimeoutRef.current) {
+          clearTimeout(apiTimeoutRef.current);
+          apiTimeoutRef.current = null;
+        }
+        if (!mountedRef.current) return;
         setStreamingMessage(null);
         setMessages((prev) => [
           ...prev,
@@ -518,7 +538,7 @@ export default function ChatWidget() {
           },
         ]);
       } finally {
-        setLoading(false);
+        if (mountedRef.current) setLoading(false);
       }
     },
     [loading],
@@ -609,21 +629,21 @@ export default function ChatWidget() {
               height: 56,
               background: (theme) =>
                 theme.palette.mode === "dark"
-                  ? "linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)"
-                  : "linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)",
-              boxShadow: "0 4px 20px rgba(26,115,232,0.4)",
+                  ? "linear-gradient(135deg, #818cf8 0%, #6366f1 100%)"
+                  : "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+              boxShadow: "0 4px 20px rgba(79,70,229,0.4)",
               "&:hover": {
                 transform: "scale(1.08)",
-                boxShadow: "0 6px 28px rgba(26,115,232,0.5)",
+                boxShadow: "0 6px 28px rgba(99,102,241,0.5)",
               },
               transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               ...(!hasEverOpened && !open
                 ? {
                     "@keyframes pulse": {
                       "0%, 100%": {
-                        boxShadow: "0 4px 20px rgba(26,115,232,0.4)",
+                        boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
                       },
-                      "50%": { boxShadow: "0 4px 30px rgba(26,115,232,0.7)" },
+                      "50%": { boxShadow: "0 4px 30px rgba(99,102,241,0.7)" },
                     },
                     animation: "pulse 2s ease-in-out infinite",
                   }
@@ -694,8 +714,8 @@ export default function ChatWidget() {
               borderColor: "divider",
               background: (theme) =>
                 theme.palette.mode === "dark"
-                  ? "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)"
-                  : "linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%)",
+                  ? "linear-gradient(135deg, #111827 0%, #0b0f19 100%)"
+                  : "linear-gradient(135deg, #eef1fb 0%, #f6f7fb 100%)",
             }}
           >
             <Avatar
@@ -704,7 +724,7 @@ export default function ChatWidget() {
                 width: 36,
                 height: 36,
                 bgcolor: "primary.main",
-                background: "linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)",
+                background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
               }}
             >
               <SmartToy sx={{ fontSize: 20 }} />
@@ -880,8 +900,8 @@ export default function ChatWidget() {
                       fontSize: "0.75rem",
                       bgcolor: (theme) =>
                         theme.palette.mode === "dark"
-                          ? "rgba(138,180,248,0.12)"
-                          : "rgba(26,115,232,0.08)",
+                          ? "rgba(165,180,252,0.12)"
+                          : "rgba(99,102,241,0.08)",
                       color: "primary.main",
                       border: "1px solid",
                       borderColor: "primary.main",
@@ -891,7 +911,7 @@ export default function ChatWidget() {
                         bgcolor: "primary.main",
                         color: "primary.contrastText",
                         transform: "translateY(-1px)",
-                        boxShadow: "0 2px 8px rgba(26,115,232,0.3)",
+                        boxShadow: "0 2px 8px rgba(99,102,241,0.3)",
                       },
                       "&:active": { transform: "translateY(0)" },
                     }}

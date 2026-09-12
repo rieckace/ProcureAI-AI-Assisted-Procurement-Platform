@@ -222,9 +222,17 @@ export default function NotificationBell() {
             <Box sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
               <Notifications sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
               <Typography variant="body2" fontWeight={500}>No notifications yet</Typography>
-              <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
+              <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block', mb: 2 }}>
                 You'll see updates about your purchase requests here
               </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<History fontSize="small" />}
+                onClick={() => { setOpen(false); navigate('/activity-log'); }}
+              >
+                View Activity Log
+              </Button>
             </Box>
           ) : (
             notifications.map((notif) => {
@@ -260,7 +268,7 @@ export default function NotificationBell() {
                       width: 32,
                       height: 32,
                       borderRadius: '50%',
-                      bgcolor: notif.read ? 'action.hover' : `${color}.replace('.main', '.light')`,
+                      bgcolor: notif.read ? 'action.hover' : color.replace('.main', '.light'),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

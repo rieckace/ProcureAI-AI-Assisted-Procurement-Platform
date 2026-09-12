@@ -73,24 +73,26 @@ async function updateDeliveryStatus(deliveryId, orgId, userId, status, trackingN
     });
   }
 
-  // If delivered, update PR status and deduct inventory
+  // If delivered, update PR status and notify — but only for POs that are
+  // mid-lifecycle (never resurrect a CANCELLED/DELIVERED PO).
   if (status === 'DELIVERED') {
-    await prisma.purchaseRequest.update({
-      where: { id: delivery.purchaseOrder.purchaseRequestId },
-      data: { status: 'delivered' }
-    });
-
-    // Notify the requester
     const pr = delivery.purchaseOrder.purchaseRequest;
-    if (pr.user) {
-      await createNotification({
-        userId: pr.user.id,
-        organizationId: orgId,
-        type: 'status_change',
-        title: '✅ Delivery Completed',
-        message: `"${pr.itemName}" has been delivered!`,
-        link: `/pr/${pr.id}`,
+    if (pr && inProgressPOs.includes(po.status)) {
+      await prisma.purchaseRequest.update({
+        where: { id: pr.id },
+        data: { status: 'delivered' }
       });
+
+      if (pr.user) {
+        await createNotification({
+          userId: pr.user.id,
+          organizationId: orgId,
+          type: 'status_change',
+          title: '✅ Delivery Completed',
+          message: `"${pr.itemName}" has been delivered!`,
+          link: `/pr/${pr.id}`,
+        });
+      }
     }
   }
 

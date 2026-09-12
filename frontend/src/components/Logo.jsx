@@ -16,11 +16,11 @@ export default function Logo({ size = 36, withWordmark = false, wordmarkSize = '
           width: size,
           height: size,
           borderRadius: size * 0.26,
-          background: 'linear-gradient(135deg, #1a73e8 0%, #1557b0 55%, #0d47a1 100%)',
+          background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 55%, #4338ca 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: `0 4px ${size * 0.4}px rgba(26,115,232,0.35)`,
+          boxShadow: `0 4px ${size * 0.4}px rgba(79,70,229,0.4)`,
           position: 'relative',
           overflow: 'hidden',
           flexShrink: 0,
@@ -45,8 +45,8 @@ export default function Logo({ size = 36, withWordmark = false, wordmarkSize = '
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="9.5" cy="20" r="1.4" fill="#aecbfa" />
-          <circle cx="17" cy="20" r="1.4" fill="#aecbfa" />
+          <circle cx="9.5" cy="20" r="1.4" fill="#a5b4fc" />
+          <circle cx="17" cy="20" r="1.4" fill="#a5b4fc" />
         </svg>
       </Box>
       {withWordmark && (
@@ -60,8 +60,8 @@ export default function Logo({ size = 36, withWordmark = false, wordmarkSize = '
               lineHeight: 1.15,
               background: (theme) =>
                 theme.palette.mode === 'dark'
-                  ? 'linear-gradient(135deg, #aecbfa, #8ab4f8)'
-                  : 'linear-gradient(135deg, #1a73e8, #0d47a1)',
+                  ? 'linear-gradient(135deg, #a5b4fc, #818cf8)'
+                  : 'linear-gradient(135deg, #6366f1, #4338ca)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',

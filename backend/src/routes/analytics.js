@@ -17,11 +17,10 @@ function buildMonthlyTrend(records, monthsBack = 5) {
   const trend = [];
   for (let i = monthsBack; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
     const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     const monthRecords = records.filter(m => {
       const created = new Date(m.createdAt);
-      return created >= d && created <= monthEnd;
+      return created >= d && created < new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
     });
     trend.push({
       month: label,
@@ -111,12 +110,11 @@ router.get('/dashboard', authenticate, async (req, res) => {
     const monthlyTrend = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
       const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
       const monthPRs = monthlyData.filter(m => {
         const created = new Date(m.createdAt);
-        return created >= d && created <= monthEnd;
+        return created >= d && created < new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
       });
 
       monthlyTrend.push({

@@ -5,7 +5,7 @@ import {
   ListItemButton, ListItemIcon, ListItemText, Chip, CircularProgress,
   InputAdornment
 } from '@mui/material';
-import { Search, Dashboard, Store, History, BarChart, Inventory, Add, Person, SmartToy } from '@mui/icons-material';
+import { Search, SearchOff, Dashboard, Store, History, BarChart, Inventory, Add, Person, SmartToy } from '@mui/icons-material';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -122,7 +122,7 @@ export default function GlobalSearch() {
             label: pr.itemName,
             path: `/pr/${pr.id}`,
             icon: <Dashboard />,
-            subtitle: `$${pr.budget.toLocaleString()} · ${pr.status} · ${pr.category}`,
+            subtitle: `₹${pr.budget.toLocaleString('en-IN')} · ${pr.status} · ${pr.category}`,
           })),
         ];
       } catch { /* silent */ }
@@ -189,7 +189,7 @@ export default function GlobalSearch() {
             sx: { borderRadius: 2, fontSize: '0.95rem' },
           }}
         />
-        {results.length > 0 && (
+        {results.length > 0 && !searching && (
           <List sx={{ mt: 1, maxHeight: 360, overflow: 'auto' }} dense>
             {results.map((item, i) => (
               <ListItem key={`${item.path}-${i}`} disablePadding>
@@ -220,6 +220,28 @@ export default function GlobalSearch() {
               </ListItem>
             ))}
           </List>
+        )}
+        {!searching && query.trim() && results.length === 0 && (
+          <Box sx={{ py: 3.5, px: 2, textAlign: 'center', animation: 'fadeInUp 0.3s ease' }}>
+            <SearchOff sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+              No results found
+            </Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+              Nothing matches &quot;{query.trim()}&quot;. Try a different keyword or check the spelling.
+            </Typography>
+          </Box>
+        )}
+        {!searching && !query.trim() && searchHistory.length === 0 && (
+          <Box sx={{ py: 3.5, px: 2, textAlign: 'center', animation: 'fadeInUp 0.3s ease' }}>
+            <Search sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+              Find anything fast
+            </Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+              Search requests, vendors, pages, and more
+            </Typography>
+          </Box>
         )}
         <Box sx={{ display: 'flex', gap: 2, mt: 1, px: 0.5, alignItems: 'center' }}>
           <Typography variant="caption" color="text.disabled">

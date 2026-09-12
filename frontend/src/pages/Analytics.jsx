@@ -10,7 +10,7 @@ import {
   Visibility, TrendingUp, AttachMoney, Inventory, HourglassBottom,
   Download, Image, SearchOff, BarChart, Group, Star,
   LocalShipping, Warning, CheckCircle, People, Storefront,
-  Category, BusinessCenter
+  Category, BusinessCenter, Inbox
 } from '@mui/icons-material';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -24,10 +24,54 @@ import StatusChip from '../components/StatusChip';
 import InsightChips from '../components/InsightChips';
 import { URGENCY_COLORS } from '../constants';
 import { exportToCsv } from '../utils/exportCsv';
+import { formatCompactINR } from '../utils/formatCompact';
+import { DashboardSkeleton } from '../components/Skeletons';
+
+// ─── Custom chart tooltip — theme-aware card ───
+
+function ChartTooltip({ active, payload, label }) {
+  const tooltipTheme = useTheme();
+  if (!active || !payload?.length) return null;
+  const formatValue = (p) => {
+    const n = p.name || p.dataKey;
+    if (n === 'Budget' || n.toLowerCase().includes('budget')) return formatCompactINR(p.value);
+    if (typeof p.value === 'number' && Math.abs(p.value) >= 5000) return formatCompactINR(p.value);
+    return p.value;
+  };
+  return (
+    <Box
+      sx={{
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        px: 1.5,
+        py: 1,
+        minWidth: 140,
+        boxShadow: tooltipTheme.palette.mode === 'dark'
+          ? '0 10px 28px rgba(0,0,0,0.55)'
+          : '0 10px 28px rgba(15,23,42,0.14)',
+      }}
+    >
+      {label != null && (
+        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+          {label}
+        </Typography>
+      )}
+      {payload.map((p, i) => (
+        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.2 }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: p.color || p.payload?.fill || p.fill || '#6366f1' }} />
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', flex: 1 }}>{p.name || p.dataKey}</Typography>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 700 }}>{formatValue(p)}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 // ─── Helpers ───
 
-const exportChartAsPng = async (chartSelector, filename) => {
+const exportChartAsPng = async (chartSelector, filename, bgColor = '#ffffff') => {
   const svgEl = document.querySelector(chartSelector);
   if (!svgEl) return;
   const svgData = new XMLSerializer().serializeToString(svgEl);
@@ -41,7 +85,7 @@ const exportChartAsPng = async (chartSelector, filename) => {
       canvas.width = img.naturalWidth * 2;
       canvas.height = img.naturalHeight * 2;
       ctx.scale(2, 2);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
       URL.revokeObjectURL(url);
@@ -58,10 +102,10 @@ const exportChartAsPng = async (chartSelector, filename) => {
   });
 };
 
-const CHART_COLORS = ['#06b6d4', '#f43f5e', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#6366f1', '#14b8a6'];
+const CHART_COLORS = ['#6366f1', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e', '#8b5cf6', '#14b8a6', '#ec4899'];
 const STATUS_COLORS = {
   pending: '#f59e0b',
-  quoted: '#3b82f6',
+  quoted: '#6366f1',
   ordered: '#8b5cf6',
   delivered: '#10b981',
   rejected: '#f43f5e',
@@ -84,9 +128,9 @@ function TabPanel({ children, value, index }) {
 // ─── Overview Tab Cards ───
 
 const OVERVIEW_CARDS = [
-  { key: 'totalPRs', label: 'Total Requests', icon: <Inventory />, color: 'primary.main', bg: 'rgba(26,115,232,0.12)' },
+  { key: 'totalPRs', label: 'Total Requests', icon: <Inventory />, color: 'primary.main', bg: 'rgba(99,102,241,0.12)' },
   { key: 'totalBudget', label: 'Total Budget', icon: <AttachMoney />, color: 'success.main', bg: 'rgba(46,125,50,0.12)', format: 'currency' },
-  { key: 'pending', label: 'Pending', icon: <HourglassBottom />, color: 'warning.main', bg: 'rgba(249,171,0,0.12)' },
+  { key: 'pending', label: 'Pending', icon: <HourglassBottom />, color: 'warning.main', bg: 'rgba(245,158,11,0.12)' },
   { key: 'totalVendors', label: 'Vendors', icon: <Storefront />, color: 'secondary.main', bg: 'rgba(147,52,230,0.12)' },
 ];
 
@@ -112,7 +156,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
       { label: 'Item', accessor: 'itemName' },
       { label: 'Requester', accessor: (r) => r.user?.name || 'Unknown' },
       { label: 'Category', accessor: 'category' },
-      { label: 'Budget', accessor: (r) => `$${r.budget.toLocaleString()}` },
+      { label: 'Budget', accessor: (r) => `₹${r.budget.toLocaleString('en-IN')}` },
       { label: 'Urgency', accessor: 'urgency' },
       { label: 'Status', accessor: 'status' },
       { label: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString() },
@@ -154,7 +198,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                   </Box>
                   <Typography variant="h4" sx={{ fontWeight: 800, color: card.color, letterSpacing: '-0.02em' }}>
                     {card.format === 'currency'
-                      ? `$${(value || 0).toLocaleString()}`
+                      ? formatCompactINR(value || 0)
                       : (value || 0).toLocaleString()}
                   </Typography>
                 </CardContent>
@@ -173,7 +217,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                 <Typography variant="subtitle1" fontWeight={600}>Request Status</Typography>
                 {statusPieData.length > 0 && (
                   <Tooltip title="Download chart as PNG">
-                    <IconButton size="small" onClick={() => exportChartAsPng('#overview-status-pie', 'request-status-chart')}>
+                    <IconButton size="small" aria-label="Download request status chart" onClick={() => exportChartAsPng('#overview-status-pie', 'request-status-chart', theme.palette.background.paper)}>
                       <Image fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -201,7 +245,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                         return <Cell key={entry.name} fill={`url(#os-${key})`} />;
                       })}
                     </Pie>
-                    <RechartsTooltip />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -222,7 +266,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                 <Typography variant="subtitle1" fontWeight={600}>Budget by Category</Typography>
                 {data.categoryData.length > 0 && (
                   <Tooltip title="Download chart as PNG">
-                    <IconButton size="small" onClick={() => exportChartAsPng('#overview-budget-bar', 'budget-by-category-chart')}>
+                    <IconButton size="small" aria-label="Download budget chart" onClick={() => exportChartAsPng('#overview-budget-bar', 'budget-by-category-chart', theme.palette.background.paper)}>
                       <Image fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -242,9 +286,8 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                     <XAxis dataKey="name" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} />
                     <YAxis tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }}
-                      tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                    <RechartsTooltip formatter={(value) => [`$${value.toLocaleString()}`, 'Budget']}
-                      contentStyle={{ borderRadius: 8, border: `1px solid ${theme.palette.divider}` }} />
+                      tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Bar dataKey="budget" radius={[6, 6, 0, 0]} name="Budget">
                       {data.categoryData.map((entry, index) => (
                         <Cell key={entry.name} fill={`url(#obg${index % CHART_COLORS.length})`} />
@@ -272,7 +315,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                 <Typography variant="subtitle1" fontWeight={600}>Monthly Request & Budget Trend</Typography>
                 {data.monthlyTrend?.some(m => m.requests > 0) && (
                   <Tooltip title="Download chart as PNG">
-                    <IconButton size="small" onClick={() => exportChartAsPng('#overview-monthly', 'monthly-trend-chart')}>
+                    <IconButton size="small" aria-label="Download monthly trend chart" onClick={() => exportChartAsPng('#overview-monthly', 'monthly-trend-chart', theme.palette.background.paper)}>
                       <Image fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -283,8 +326,8 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                   <ReBarChart id="overview-monthly" data={data.monthlyTrend} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                     <defs>
                       <linearGradient id="om-requests" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.95} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.5} />
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0.5} />
                       </linearGradient>
                       <linearGradient id="om-budget" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#10b981" stopOpacity={0.95} />
@@ -295,9 +338,8 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                     <XAxis dataKey="month" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} />
                     <YAxis yAxisId="left" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} allowDecimals={false} />
                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: theme.palette.text.secondary }}
-                      axisLine={{ stroke: theme.palette.divider }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                    <RechartsTooltip contentStyle={{ borderRadius: 8, border: `1px solid ${theme.palette.divider}` }}
-                      formatter={(value, name) => name === 'Budget' ? [`$${value.toLocaleString()}`, name] : [value, name]} />
+                      axisLine={{ stroke: theme.palette.divider }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Legend />
                     <Bar yAxisId="left" dataKey="requests" fill="url(#om-requests)" radius={[6, 6, 0, 0]} name="Requests" />
                     <Bar yAxisId="right" dataKey="budget" fill="url(#om-budget)" radius={[6, 6, 0, 0]} name="Budget" />
@@ -306,7 +348,8 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
               ) : (
                 <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
                   <TrendingUp sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
-                  <Typography>Not enough data for trends yet</Typography>
+                  <Typography variant="body1" sx={{ mb: 0.5 }}>Not enough data for trends</Typography>
+                  <Typography variant="caption">Monthly trends appear after 2+ months of request data</Typography>
                 </Box>
               )}
             </CardContent>
@@ -320,7 +363,7 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                 <Typography variant="subtitle1" fontWeight={600}>Urgency Breakdown</Typography>
                 {urgencyPieData.length > 0 && (
                   <Tooltip title="Download chart as PNG">
-                    <IconButton size="small" onClick={() => exportChartAsPng('#overview-urgency', 'urgency-breakdown-chart')}>
+                    <IconButton size="small" aria-label="Download urgency chart" onClick={() => exportChartAsPng('#overview-urgency', 'urgency-breakdown-chart', theme.palette.background.paper)}>
                       <Image fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -348,12 +391,16 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                         return <Cell key={entry.name} fill={`url(#ou-${key})`} />;
                       })}
                     </Pie>
-                    <RechartsTooltip />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>No data yet</Box>
+                <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+                  <Warning sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
+                  <Typography variant="body1" sx={{ mb: 0.5 }}>No urgency data available</Typography>
+                  <Typography variant="caption">Submit requests with urgency levels to see breakdown</Typography>
+                </Box>
               )}
             </CardContent>
           </Card>
@@ -389,13 +436,13 @@ function OverviewTab({ data, error, navigate, theme, isMobile, showToast }) {
                         <Typography variant="body2" fontWeight={600}>{pr.itemName}</Typography>
                         {isMobile && (
                           <Typography variant="caption" color="text.secondary">
-                            {pr.category} · ${pr.budget.toLocaleString()}
+                            {pr.category} · ₹{pr.budget.toLocaleString('en-IN')}
                           </Typography>
                         )}
                       </TableCell>
                       {!isMobile && <TableCell><Typography variant="body2">{pr.user?.name || 'Unknown'}</Typography></TableCell>}
                       <TableCell>{pr.category}</TableCell>
-                      {!isMobile && <TableCell><Typography variant="body2" fontWeight={500}>${pr.budget.toLocaleString()}</Typography></TableCell>}
+                      {!isMobile && <TableCell><Typography variant="body2" fontWeight={500}>₹{pr.budget.toLocaleString('en-IN')}</Typography></TableCell>}
                       <TableCell>
                         <Chip label={pr.urgency} size="small"
                           sx={{ backgroundColor: URGENCY_COLORS[pr.urgency]?.bg || 'action.hover',
@@ -460,7 +507,7 @@ function RequestsTab({ data, loading, error, theme }) {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>Departments</Typography>
-                <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(26,115,232,0.12)' }}>
+                <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(99,102,241,0.12)' }}>
                   <BusinessCenter />
                 </Box>
               </Box>
@@ -473,7 +520,7 @@ function RequestsTab({ data, loading, error, theme }) {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>Top Requester</Typography>
-                <Box sx={{ color: 'warning.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(249,171,0,0.12)' }}>
+                <Box sx={{ color: 'warning.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(245,158,11,0.12)' }}>
                   <Group />
                 </Box>
               </Box>
@@ -530,10 +577,8 @@ function RequestsTab({ data, loading, error, theme }) {
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                     <XAxis type="number" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} allowDecimals={false} />
                     <YAxis dataKey="department" type="category" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} width={100} />
-                    <RechartsTooltip
-                      formatter={(value, name) => [value, name === 'requests' ? 'Requests' : 'Budget']}
-                      contentStyle={{ borderRadius: 8, border: `1px solid ${theme.palette.divider}` }} />
-                    <Bar dataKey="requests" fill="#3b82f6" radius={[0, 6, 6, 0]} name="requests">
+                    <RechartsTooltip content={<ChartTooltip />} />
+                    <Bar dataKey="requests" fill="#6366f1" radius={[0, 6, 6, 0]} name="requests">
                       {data.prsByDepartment.map((_, i) => (
                         <Cell key={i} fill={`url(#obg${i % CHART_COLORS.length})`} />
                       ))}
@@ -576,17 +621,18 @@ function RequestsTab({ data, loading, error, theme }) {
                             <Chip label={r.requests} size="small" color="primary" variant="outlined" sx={{ minWidth: 32 }} />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" fontWeight={500}>${r.budget.toLocaleString()}</Typography>
+                            <Typography variant="body2" fontWeight={500}>₹{r.budget.toLocaleString('en-IN')}</Typography>
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              ) : (
+) : (
                 <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
-                  <Group sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
-                  <Typography>No requesters yet</Typography>
+                  <Inbox sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
+                  <Typography variant="body1" sx={{ mb: 0.5 }}>No status data available</Typography>
+                  <Typography variant="caption">Create purchase requests to see status breakdown</Typography>
                 </Box>
               )}
             </CardContent>
@@ -621,7 +667,7 @@ function RequestsTab({ data, loading, error, theme }) {
                         <Cell key={entry.status} fill={`url(#rs-${entry.status})`} />
                       ))}
                     </Pie>
-                    <RechartsTooltip />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -641,14 +687,14 @@ function RequestsTab({ data, loading, error, theme }) {
                   <ReBarChart id="rt-monthly" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                     <defs>
                       <linearGradient id="rt-requests" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.9} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.5} />
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0.5} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                     <XAxis dataKey="month" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} />
                     <YAxis tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} allowDecimals={false} />
-                    <RechartsTooltip contentStyle={{ borderRadius: 8, border: `1px solid ${theme.palette.divider}` }} />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Bar dataKey="count" fill="url(#rt-requests)" radius={[6, 6, 0, 0]} name="Requests" />
                   </ReBarChart>
                 </ResponsiveContainer>
@@ -703,7 +749,7 @@ function VendorsTab({ data, loading, error, theme, navigate }) {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>Total Vendors</Typography>
-                <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(26,115,232,0.12)' }}>
+                <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(99,102,241,0.12)' }}>
                   <People />
                 </Box>
               </Box>
@@ -717,7 +763,7 @@ function VendorsTab({ data, loading, error, theme, navigate }) {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>Avg Rating</Typography>
-                <Box sx={{ color: 'warning.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(249,171,0,0.12)' }}>
+                <Box sx={{ color: 'warning.main', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 2, backgroundColor: 'rgba(245,158,11,0.12)' }}>
                   <Star />
                 </Box>
               </Box>
@@ -768,15 +814,9 @@ function VendorsTab({ data, loading, error, theme, navigate }) {
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                     <XAxis dataKey="category" tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} />
                     <YAxis tick={{ fontSize: 12, fill: theme.palette.text.secondary }} axisLine={{ stroke: theme.palette.divider }} allowDecimals={false} />
-                    <RechartsTooltip
-                      formatter={(value, name) => {
-                        if (name === 'count') return [value, 'Vendors'];
-                        if (name === 'avgRating') return [value, 'Avg Rating'];
-                        return [value, name];
-                      }}
-                      contentStyle={{ borderRadius: 8, border: `1px solid ${theme.palette.divider}` }} />
+                    <RechartsTooltip content={<ChartTooltip />} />
                     <Legend />
-                    <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} name="count" />
+                    <Bar dataKey="count" fill="#6366f1" radius={[6, 6, 0, 0]} name="count" />
                   </ReBarChart>
                 </ResponsiveContainer>
               ) : (
@@ -824,10 +864,11 @@ function VendorsTab({ data, loading, error, theme, navigate }) {
                     </Box>
                   ))}
                 </Box>
-              ) : (
+) : (
                 <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
-                  <Star sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
-                  <Typography>No vendors yet</Typography>
+                  <AttachMoney sx={{ fontSize: 48, mb: 1, opacity: 0.4 }} />
+                  <Typography variant="body1" sx={{ mb: 0.5 }}>No budget data by category</Typography>
+                  <Typography variant="caption">Add categorized requests to see budget distribution</Typography>
                 </Box>
               )}
             </CardContent>
@@ -917,7 +958,7 @@ function VendorsTab({ data, loading, error, theme, navigate }) {
                             <Chip label={v.quotesCount} size="small" color={v.quotesCount > 0 ? 'success' : 'default'} variant="outlined" />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" fontWeight={500}>${v.avgPrice.toLocaleString()}</Typography>
+                            <Typography variant="body2" fontWeight={500}>₹{v.avgPrice.toLocaleString('en-IN')}</Typography>
                           </TableCell>
                           <TableCell align="right">
                             <Typography variant="body2">{v.avgDeliveryDays}d</Typography>
@@ -1047,8 +1088,8 @@ export default function Analytics() {
       {/* Header Banner */}
       <Box sx={{
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(129,140,248,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.03) 100%)',
         borderRadius: 3, p: 3, mb: 3,
         border: '1px solid', borderColor: 'divider',
       }}>
@@ -1097,10 +1138,7 @@ export default function Analytics() {
       {/* Tab Content — each tab manages its own loading state internally */}
       <TabPanel value={tabValue} index={0}>
         {overviewLoading ? (
-          <Box sx={{ textAlign: 'center', py: 8 }}>
-            <CircularProgress size={40} sx={{ mb: 2 }} />
-            <Typography variant="body2" color="text.secondary">Loading analytics...</Typography>
-          </Box>
+          <DashboardSkeleton />
         ) : (
           <OverviewTab data={overviewData} error={overviewError} navigate={navigate}
             theme={theme} isMobile={isMobile} showToast={showToast} />

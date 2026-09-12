@@ -7,25 +7,19 @@ const logger = require('../lib/logger');
 /**
  * Generate next PO number for an organization
  * Format: PO-{YEAR}-{SEQUENTIAL}
+ * Scans upward past any numbers that are already taken so a stale "max" read
+ * can never hand out a duplicate (poNumber is UNIQUE in the schema).
  */
 async function generatePONumber(orgId) {
   const year = new Date().getFullYear();
-  
-  const lastPO = await prisma.purchaseOrder.findFirst({
-    where: {
-      organizationId: orgId,
-      poNumber: { startsWith: `PO-${year}-` }
-    },
-    orderBy: { poNumber: 'desc' }
-  });
-
-  let nextSeq = 1;
-  if (lastPO) {
-    const parts = lastPO.poNumber.split('-');
-    nextSeq = parseInt(parts[2]) + 1;
+  let seq = 1;
+  while (seq <= 99999) {
+    const candidate = `PO-${year}-${String(seq).padStart(3, '0')}`;
+    const exists = await prisma.purchaseOrder.findUnique({ where: { poNumber: candidate } });
+    if (!exists) return candidate;
+    seq += 1;
   }
-
-  return `PO-${year}-${String(nextSeq).padStart(3, '0')}`;
+  throw new Error(`Unable to allocate a PO number for ${year}`);
 }
 
 /**
@@ -47,31 +41,50 @@ async function createPO(prId, vendorId, userId, orgId) {
     throw new Error(`No quote found for vendor ${vendorId}`);
   }
 
-  // Check if PO already exists
-  const existingPO = await prisma.purchaseOrder.findFirst({
-    where: { purchaseRequestId: prId }
-  });
-  if (existingPO) {
-    throw new Error(`A purchase order (${existingPO.poNumber}) already exists for this request`);
+  // Build + create the PO. poNumber is UNIQUE, so a concurrent create that
+  // allocated the same number fails with P2002 — regenerate and retry instead
+  // of 500ing. The existing-PO check runs on every attempt, so a concurrent
+  // double-submit for the same PR is also caught on retry.
+  let po = null;
+  let poNumber = null;
+  for (let attempt = 0; attempt < 50 && !po; attempt++) {
+    const existingPO = await prisma.purchaseOrder.findFirst({
+      where: { purchaseRequestId: prId }
+    });
+    if (existingPO) {
+      throw new Error(`A purchase order (${existingPO.poNumber}) already exists for this request`);
+    }
+
+    poNumber = await generatePONumber(orgId);
+
+    try {
+      po = await prisma.purchaseOrder.create({
+        data: {
+          poNumber,
+          purchaseRequestId: prId,
+          vendorId,
+          totalAmount: quote.price,
+          status: 'PENDING_APPROVAL',
+          expectedDelivery: new Date(Date.now() + quote.deliveryDays * 24 * 60 * 60 * 1000),
+          organizationId: orgId,
+        },
+        include: {
+          purchaseRequest: true,
+          vendor: true,
+        }
+      });
+    } catch (err) {
+      if (err.code === 'P2002' && String(err.meta?.target ?? '').includes('poNumber')) {
+        po = null; // another request grabbed this number — try the next one
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const poNumber = await generatePONumber(orgId);
-
-  const po = await prisma.purchaseOrder.create({
-    data: {
-      poNumber,
-      purchaseRequestId: prId,
-      vendorId,
-      totalAmount: quote.price,
-      status: 'PENDING_APPROVAL',
-      expectedDelivery: new Date(Date.now() + quote.deliveryDays * 24 * 60 * 60 * 1000),
-      organizationId: orgId,
-    },
-    include: {
-      purchaseRequest: true,
-      vendor: true,
-    }
-  });
+  if (!po) {
+    throw new Error('Unable to allocate a unique PO number');
+  }
 
   // Update PR status
   await prisma.purchaseRequest.update({
@@ -96,7 +109,7 @@ async function createPO(prId, vendorId, userId, orgId) {
     role: 'admin',
     type: 'po_issued',
     title: `📦 PO Generated: ${poNumber}`,
-    message: `Purchase Order ${poNumber} generated for "${pr.itemName}" from ${quote.vendor.name} — $${quote.price.toLocaleString()}`,
+    message: `Purchase Order ${poNumber} generated for "${pr.itemName}" from ${quote.vendor.name} — ₹${quote.price.toLocaleString('en-IN')}`,
     link: `/pr/${prId}`,
   });
 
@@ -106,6 +119,7 @@ async function createPO(prId, vendorId, userId, orgId) {
     const emailResult = await sendPurchaseOrderEmail(quote.vendor.email, quote.vendor.name, {
       itemName: pr.itemName,
       quantity: pr.quantity,
+      unit: pr.unit || 'unit',
       price: quote.price,
       deliveryDays: quote.deliveryDays,
       poNumber,
@@ -263,7 +277,7 @@ async function getPurchaseOrders(orgId, filters = {}) {
   const orders = await prisma.purchaseOrder.findMany({
     where,
     include: {
-      purchaseRequest: { select: { itemName: true, category: true, quantity: true } },
+      purchaseRequest: { select: { itemName: true, category: true, quantity: true, unit: true } },
       vendor: { select: { name: true, email: true } },
       delivery: { select: { status: true, trackingNumber: true, estimatedArrival: true } },
     },
