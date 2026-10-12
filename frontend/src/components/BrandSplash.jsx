@@ -40,7 +40,7 @@ export default function BrandSplash({ message = 'Loading…' }) {
             width: '40%',
             height: '100%',
             borderRadius: 2,
-            background: (theme) => `linear-gradient(90deg, transparent, ${theme.palette.mode === 'dark' ? '#8ab4f8' : '#1a73e8'}, transparent)`,
+            background: (theme) => `linear-gradient(90deg, transparent, ${theme.palette.mode === 'dark' ? '#818cf8' : '#6366f1'}, transparent)`,
             animation: 'shimmer 1.3s ease-in-out infinite',
             backgroundSize: '200% 100%',
           }}

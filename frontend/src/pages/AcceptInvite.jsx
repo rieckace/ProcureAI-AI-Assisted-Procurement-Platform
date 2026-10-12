@@ -7,12 +7,15 @@ import {
 import { HowToReg, Lock, Person, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
+import CapsLockHint, { getCapsLock } from '../components/CapsLockHint';
+import Logo from '../components/Logo';
 
 export default function AcceptInvite() {
   const { token } = useParams();
   const navigate = useNavigate();
   const { acceptInvite } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', password: '', confirmPassword: '' });
@@ -65,22 +68,15 @@ export default function AcceptInvite() {
         alignItems: 'center',
         justifyContent: 'center',
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #121212 0%, #1a1a2e 100%)'
-          : 'linear-gradient(135deg, #f5f7fa 0%, #e8edf5 100%)',
+          ? 'linear-gradient(135deg, #0b0f19 0%, #141b2e 100%)'
+          : 'linear-gradient(135deg, #f6f7fb 0%, #eef1fb 100%)',
         p: 2,
       }}
     >
       <Card sx={{ maxWidth: 440, width: '100%' }}>
         <Box sx={{ textAlign: 'center', pt: 4, pb: 2, px: 3 }}>
-          <Box
-            sx={{
-              width: 64, height: 64, borderRadius: 3,
-              background: 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              mx: 'auto', mb: 2, boxShadow: '0 4px 12px rgba(26,115,232,0.3)',
-            }}
-          >
-            <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>P</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+            <Logo size={64} />
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
             Accept Invitation
@@ -116,6 +112,8 @@ export default function AcceptInvite() {
               type={showPassword ? 'text' : 'password'}
               value={form.password}
               onChange={handleChange('password')}
+              onKeyDown={(e) => setCapsLock(getCapsLock(e))}
+              onKeyUp={(e) => setCapsLock(getCapsLock(e))}
               required
               helperText="At least 6 characters"
               sx={{ mb: 1 }}
@@ -132,6 +130,7 @@ export default function AcceptInvite() {
                 ),
               }}
             />
+            <CapsLockHint active={capsLock} />
 
             <PasswordStrength password={form.password} />
 
@@ -141,6 +140,8 @@ export default function AcceptInvite() {
               type={showPassword ? 'text' : 'password'}
               value={form.confirmPassword}
               onChange={handleChange('confirmPassword')}
+              onKeyDown={(e) => setCapsLock(getCapsLock(e))}
+              onKeyUp={(e) => setCapsLock(getCapsLock(e))}
               required
               sx={{ mb: 3 }}
               InputProps={{
@@ -149,6 +150,7 @@ export default function AcceptInvite() {
                 ),
               }}
             />
+            <CapsLockHint active={capsLock} />
 
             <Button
               fullWidth
@@ -162,12 +164,12 @@ export default function AcceptInvite() {
                 fontSize: '0.95rem',
                 fontWeight: 600,
                 background: (theme) => theme.palette.mode === 'dark'
-                  ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-                  : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
+                  ? 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)'
+                  : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                 '&:hover': {
                   background: (theme) => theme.palette.mode === 'dark'
-                    ? 'linear-gradient(135deg, #aecbfa 0%, #8ab4f8 100%)'
-                    : 'linear-gradient(135deg, #1557b0 0%, #124896 100%)',
+                    ? 'linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%)'
+                    : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
                 },
               }}
             >

@@ -1,4 +1,5 @@
 import { Box, Card, CardContent, Typography } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import AnimatedCounter from './AnimatedCounter';
 import Sparkline from './Sparkline';
 import ProgressRing from './ProgressRing';
@@ -9,13 +10,25 @@ import ProgressRing from './ProgressRing';
  *
  * Usage:
  *   <DashboardHero stats={[
- *     { label: 'Total Requests', value: 42, icon: <Inbox />, hex: '#1a73e8',
+ *     { label: 'Total Requests', value: 42, icon: <Inbox />, hex: '#6366f1',
  *       sparkline: [2,4,3,6,5,8,7] },
- *     { label: 'Completed', value: 60, icon: <CheckCircle />, hex: '#34a853',
+ *     { label: 'Completed', value: 60, icon: <CheckCircle />, hex: '#10b981',
  *       ring: true, suffix: '%' },
- *   ]} />
+ *   ]} onStatClick={(stat) => setStatusFilter(stat.filterKey)} />
+ *
+ * Cards become clickable when a stat has a `to` route or `onStatClick` is passed.
  */
-export default function DashboardHero({ stats = [] }) {
+export default function DashboardHero({ stats = [], onStatClick }) {
+  const navigate = useNavigate();
+
+  const handleActivate = (s) => {
+    if (s.to) {
+      navigate(s.to);
+    } else if (onStatClick) {
+      onStatClick(s);
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -25,13 +38,33 @@ export default function DashboardHero({ stats = [] }) {
         mb: 3,
       }}
     >
-      {stats.map((s) => (
+      {stats.map((s) => {
+        const clickable = Boolean(s.to || onStatClick);
+        return (
         <Card
           key={s.label}
+          onClick={clickable ? () => handleActivate(s) : undefined}
+          onKeyDown={clickable ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleActivate(s);
+            }
+          } : undefined}
+          tabIndex={clickable ? 0 : undefined}
+          role={clickable ? 'button' : undefined}
+          aria-label={clickable ? `${s.label} — open` : undefined}
           sx={{
             position: 'relative',
             overflow: 'hidden',
             animation: 'fadeInUp 0.4s ease both',
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            cursor: clickable ? 'pointer' : 'default',
+            '&:hover': {
+              transform: 'translateY(-3px)',
+              boxShadow: '0 12px 28px rgba(15,23,42,0.12)',
+              ...(clickable ? { outline: '2px solid', outlineColor: 'primary.main' } : {}),
+            },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
             ...(s.pulse
               ? {
                   animation: 'pulse 2s ease-in-out infinite',
@@ -107,7 +140,8 @@ export default function DashboardHero({ stats = [] }) {
             )}
           </CardContent>
         </Card>
-      ))}
+        );
+      })}
     </Box>
   );
 }

@@ -5,11 +5,11 @@
  * when one hits rate limits. All models are free on Groq's tier.
  * 
  * Model priority (best → fastest):
- * 1. llama-3.3-70b-versatile (best quality, 70B)
- * 2. qwen/qwen3.6-27b (strong reasoning, 27B)
- * 3. llama-3.1-8b-instant (fast, 8B)
- * 4. mixtral-8x7b-32768 (good balance, MoE)
- * 5. gemma2-9b-it (compact, 9B)
+ * 1. openai/gpt-oss-120b (best quality, 120B)
+ * 2. qwen/qwen3.8-27b (strong reasoning, 27B)
+ * 3. openai/gpt-oss-20b (fast, 20B)
+ * 4. qwen/qwen3.6-27b (compact reasoning, 27B)
+ * 5. allam-2-7b (small footprint, 7B)
  */
 
 const OpenAI = require('openai');
@@ -19,38 +19,38 @@ const OpenAI = require('openai');
  */
 const GROQ_MODELS = [
   {
-    id: 'groq_llama33_70b',
-    name: 'Llama 3.3 70B',
-    model: 'llama-3.3-70b-versatile',
+    id: 'groq_gpt_oss_120b',
+    name: 'GPT-OSS 120B',
+    model: 'openai/gpt-oss-120b',
     supportsTools: true,
     priority: 1,
+  },
+  {
+    id: 'groq_qwen38_27b',
+    name: 'Qwen 3.8 27B',
+    model: 'qwen/qwen3.8-27b',
+    supportsTools: true,
+    priority: 2,
+  },
+  {
+    id: 'groq_gpt_oss_20b',
+    name: 'GPT-OSS 20B',
+    model: 'openai/gpt-oss-20b',
+    supportsTools: true,
+    priority: 3,
   },
   {
     id: 'groq_qwen36_27b',
     name: 'Qwen 3.6 27B',
     model: 'qwen/qwen3.6-27b',
     supportsTools: true,
-    priority: 2,
-  },
-  {
-    id: 'groq_llama31_8b',
-    name: 'Llama 3.1 8B Instant',
-    model: 'llama-3.1-8b-instant',
-    supportsTools: true,
-    priority: 3,
-  },
-  {
-    id: 'groq_mixtral_8x7b',
-    name: 'Mixtral 8x7B',
-    model: 'mixtral-8x7b-32768',
-    supportsTools: true,
     priority: 4,
   },
   {
-    id: 'groq_gemma2_9b',
-    name: 'Gemma 2 9B',
-    model: 'gemma2-9b-it',
-    supportsTools: false, // Gemma doesn't support tool calling
+    id: 'groq_allam_2b',
+    name: 'Allam 2 7B',
+    model: 'allam-2-7b',
+    supportsTools: false, // Allam 2 doesn't support tool calling
     priority: 5,
   },
 ];

@@ -35,7 +35,7 @@ export default function EmptyState({
           height: compact ? 160 : 260,
           transform: 'translate(-50%, -50%)',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(26,115,232,0.08) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%)',
           pointerEvents: 'none',
         }}
       />
@@ -51,8 +51,8 @@ export default function EmptyState({
           mb: 1.5,
           background: (theme) =>
             theme.palette.mode === 'dark'
-              ? 'linear-gradient(135deg, rgba(138,180,248,0.15), rgba(138,180,248,0.05))'
-              : 'linear-gradient(135deg, rgba(26,115,232,0.1), rgba(26,115,232,0.04))',
+              ? 'linear-gradient(135deg, rgba(165,180,252,0.15), rgba(165,180,252,0.05))'
+              : 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.04))',
           color: 'primary.main',
           animation: 'float 3s ease-in-out infinite',
         }}

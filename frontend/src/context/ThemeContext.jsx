@@ -5,40 +5,40 @@ import api from '../api';
 const ThemeContext = createContext(null);
 
 const lightPalette = {
-  primary: { main: '#1a73e8', light: '#4b8ff0', dark: '#1557b0', contrastText: '#ffffff' },
-  secondary: { main: '#1e8e3e', light: '#34a853', dark: '#188038' },
-  error: { main: '#d93025', light: '#fce8e6', dark: '#c5221f' },
-  warning: { main: '#f9ab00', light: '#fef7e0', dark: '#e37400' },
-  info: { main: '#1a73e8', light: '#e8f0fe', dark: '#1557b0' },
-  success: { main: '#1e8e3e', light: '#e6f4ea', dark: '#188038' },
-  background: { default: '#f1f3f4', paper: '#ffffff' },
-  text: { primary: '#202124', secondary: '#5f6368', disabled: '#9aa0a6' },
-  divider: '#dadce0',
+  primary: { main: '#4f46e5', light: '#818cf8', dark: '#4338ca', contrastText: '#ffffff' },
+  secondary: { main: '#10b981', light: '#34d399', dark: '#059669' },
+  error: { main: '#ef4444', light: '#fee2e2', dark: '#dc2626' },
+  warning: { main: '#f59e0b', light: '#fef3c7', dark: '#d97706' },
+  info: { main: '#6366f1', light: '#e0e7ff', dark: '#4338ca' },
+  success: { main: '#10b981', light: '#d1fae5', dark: '#059669' },
+  background: { default: '#f6f7fb', paper: '#ffffff' },
+  text: { primary: '#0f172a', secondary: '#64748b', disabled: '#94a3b8' },
+  divider: '#e2e8f0',
   action: {
-    active: '#5f6368',
-    hover: 'rgba(60,64,67,0.04)',
-    selected: 'rgba(60,64,67,0.08)',
-    disabled: 'rgba(60,64,67,0.26)',
-    disabledBackground: 'rgba(60,64,67,0.12)',
+    active: '#64748b',
+    hover: 'rgba(15,23,42,0.045)',
+    selected: 'rgba(15,23,42,0.08)',
+    disabled: 'rgba(15,23,42,0.26)',
+    disabledBackground: 'rgba(15,23,42,0.12)',
   },
 };
 
 const darkPalette = {
-  primary: { main: '#8ab4f8', light: '#aecbfa', dark: '#669df6', contrastText: '#202124' },
-  secondary: { main: '#81c995', light: '#a8dab5', dark: '#5bb974' },
-  error: { main: '#f28b82', light: '#3c2121', dark: '#d93025' },
-  warning: { main: '#fdd663', light: '#352f1c', dark: '#e37400' },
-  info: { main: '#8ab4f8', light: '#1a2433', dark: '#669df6' },
-  success: { main: '#81c995', light: '#1d3525', dark: '#5bb974' },
-  background: { default: '#171717', paper: '#202124' },
-  text: { primary: '#e8eaed', secondary: '#9aa0a6', disabled: '#5f6368' },
-  divider: '#3c4043',
+  primary: { main: '#818cf8', light: '#a5b4fc', dark: '#6366f1', contrastText: '#0b0f19' },
+  secondary: { main: '#34d399', light: '#6ee7b7', dark: '#10b981' },
+  error: { main: '#f87171', light: 'rgba(248,113,113,0.14)', dark: '#ef4444' },
+  warning: { main: '#fbbf24', light: 'rgba(251,191,36,0.14)', dark: '#f59e0b' },
+  info: { main: '#a5b4fc', light: 'rgba(165,180,252,0.14)', dark: '#6366f1' },
+  success: { main: '#34d399', light: 'rgba(52,211,153,0.14)', dark: '#10b981' },
+  background: { default: '#0b0f19', paper: '#111827' },
+  text: { primary: '#e5e7eb', secondary: '#94a3b8', disabled: '#475569' },
+  divider: 'rgba(255,255,255,0.08)',
   action: {
-    active: '#9aa0a6',
-    hover: 'rgba(232,234,237,0.04)',
-    selected: 'rgba(232,234,237,0.08)',
-    disabled: 'rgba(232,234,237,0.3)',
-    disabledBackground: 'rgba(232,234,237,0.12)',
+    active: '#94a3b8',
+    hover: 'rgba(255,255,255,0.05)',
+    selected: 'rgba(255,255,255,0.1)',
+    disabled: 'rgba(255,255,255,0.3)',
+    disabledBackground: 'rgba(255,255,255,0.12)',
   },
 };
 
@@ -79,7 +79,7 @@ function buildTheme(mode) {
       overline: { letterSpacing: '0.08em' },
       button: { textTransform: 'none', fontWeight: 600, fontSize: '0.875rem', letterSpacing: '0.005em' },
     },
-    shape: { borderRadius: 6 },
+    shape: { borderRadius: 10 },
     transitions: {
       duration: {
         shortest: 100,
@@ -97,6 +97,33 @@ function buildTheme(mode) {
             scrollBehavior: 'smooth',
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',
+            fontVariantNumeric: 'tabular-nums',
+          },
+          // Themed scrollbars (WebKit + Firefox) that match the active palette
+          '*::-webkit-scrollbar': { width: 10, height: 10 },
+          '*::-webkit-scrollbar-track': { background: 'transparent' },
+          '*::-webkit-scrollbar-thumb': {
+            background: mode === 'dark' ? 'rgba(148,163,184,0.3)' : 'rgba(100,116,139,0.3)',
+            borderRadius: 8,
+            border: `2px solid ${mode === 'dark' ? '#0b0f19' : '#f6f7fb'}`,
+            '&:hover': {
+              background: mode === 'dark' ? 'rgba(148,163,184,0.5)' : 'rgba(100,116,139,0.5)',
+            },
+          },
+          '*': {
+            scrollbarWidth: 'thin',
+            scrollbarColor: mode === 'dark' ? 'rgba(148,163,184,0.3) transparent' : 'rgba(100,116,139,0.3) transparent',
+          },
+          // Brand-tinted text selection
+          '::selection': {
+            background: mode === 'dark' ? 'rgba(129,140,248,0.35)' : 'rgba(99,102,241,0.22)',
+            color: mode === 'dark' ? '#e5e7eb' : '#0f172a',
+          },
+          // Visible focus rings for keyboard users (accessibility)
+          '*:focus-visible': {
+            outline: '2px solid #6366f1',
+            outlineOffset: 2,
+            borderRadius: 4,
           },
           // Respect users who prefer reduced motion (accessibility)
           '@media (prefers-reduced-motion: reduce)': {
@@ -154,8 +181,8 @@ function buildTheme(mode) {
             '50%': { transform: 'translateY(-6px)' },
           },
           '@keyframes glow': {
-            '0%, 100%': { boxShadow: '0 0 8px rgba(26,115,232,0.3)' },
-            '50%': { boxShadow: '0 0 20px rgba(26,115,232,0.6)' },
+            '0%, 100%': { boxShadow: '0 0 8px rgba(99,102,241,0.3)' },
+            '50%': { boxShadow: '0 0 20px rgba(99,102,241,0.6)' },
           },
           '@keyframes scaleIn': {
             from: { opacity: 0, transform: 'scale(0.95)' },
@@ -191,15 +218,20 @@ function buildTheme(mode) {
             '0%': { transform: 'scale(0)', opacity: 0.5 },
             '100%': { transform: 'scale(4)', opacity: 0 },
           },
+          '@keyframes shake': {
+            '0%, 100%': { transform: 'translateX(0)' },
+            '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-4px)' },
+            '20%, 40%, 60%, 80%': { transform: 'translateX(4px)' },
+          },
         },
       },
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: 4,
+            borderRadius: '8px',
             padding: '7px 20px',
             fontSize: '0.875rem',
-            fontWeight: 500,
+            fontWeight: 600,
             boxShadow: 'none',
             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             '&:hover': {
@@ -212,20 +244,20 @@ function buildTheme(mode) {
           },
           contained: ({ theme }) => ({
             background: theme.palette.mode === 'dark'
-              ? 'linear-gradient(135deg, #8ab4f8 0%, #669df6 100%)'
-              : 'linear-gradient(135deg, #1a73e8 0%, #1557b0 100%)',
+              ? 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)'
+              : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
             '&:hover': {
               background: theme.palette.mode === 'dark'
-                ? 'linear-gradient(135deg, #aecbfa 0%, #8ab4f8 100%)'
-                : 'linear-gradient(135deg, #1557b0 0%, #124896 100%)',
+                ? 'linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%)'
+                : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
               boxShadow: theme.palette.mode === 'dark'
-                ? '0 4px 12px rgba(138,180,248,0.3)'
-                : '0 4px 12px rgba(26,115,232,0.35)',
+                ? '0 4px 12px rgba(129,140,248,0.35)'
+                : '0 4px 12px rgba(79,70,229,0.35)',
             },
           }),
           outlined: {
             '&:hover': {
-              backgroundColor: 'rgba(26,115,232,0.04)',
+              backgroundColor: 'rgba(79,70,229,0.05)',
               borderColor: 'primary.main',
             },
           },
@@ -235,29 +267,29 @@ function buildTheme(mode) {
       MuiCard: {
         styleOverrides: {
           root: ({ theme }) => ({
-            borderRadius: 8,
+            borderRadius: 12,
             boxShadow: theme.palette.mode === 'dark'
-              ? '0 1px 3px rgba(0,0,0,0.3)'
-              : '0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1)',
-            border: 'none',
+              ? '0 1px 3px rgba(0,0,0,0.35)'
+              : '0 1px 3px rgba(15,23,42,0.04), 0 1px 2px rgba(15,23,42,0.06)',
+            border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)'}`,
             transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             '&:hover': {
               boxShadow: theme.palette.mode === 'dark'
-                ? '0 8px 25px rgba(0,0,0,0.4)'
-                : '0 8px 25px rgba(0,0,0,0.1)',
+                ? '0 8px 30px rgba(0,0,0,0.5)'
+                : '0 12px 32px rgba(15,23,42,0.1)',
               transform: 'translateY(-2px)',
             },
           }),
         },
       },
       MuiPaper: {
-        styleOverrides: { root: { borderRadius: 8 } },
+        styleOverrides: { root: { borderRadius: 12 } },
       },
       MuiTextField: {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: 4,
+              borderRadius: 10,
               backgroundColor: 'transparent',
               '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'primary.main' },
             },
@@ -266,7 +298,7 @@ function buildTheme(mode) {
       },
       MuiChip: {
         styleOverrides: {
-          root: { borderRadius: 4, fontWeight: 500, fontSize: '0.75rem', height: 24 },
+          root: { borderRadius: 999, fontWeight: 500, fontSize: '0.75rem', height: 24 },
           sizeSmall: { height: 20, fontSize: '0.6875rem' },
         },
       },
@@ -295,6 +327,8 @@ function buildTheme(mode) {
             transition: 'background-color 0.12s ease',
             '&:last-child td': { borderBottom: 'none' },
             '&:nth-of-type(even)': { backgroundColor: 'action.hover' },
+            '&:hover': { backgroundColor: 'action.selected' },
+            '&.MuiTableRow-hover:hover': { backgroundColor: 'action.selected' },
           },
         },
       },
@@ -305,12 +339,12 @@ function buildTheme(mode) {
         styleOverrides: { root: { borderRadius: 0 } },
       },
       MuiDialog: {
-        styleOverrides: { paper: { borderRadius: 8 } },
+        styleOverrides: { paper: { borderRadius: 14 } },
       },
       MuiToggleButton: {
         styleOverrides: {
           root: {
-            borderRadius: 4,
+            borderRadius: 8,
             borderColor: 'divider',
             '&.Mui-selected': {
               backgroundColor: 'action.selected',
@@ -342,7 +376,7 @@ function buildTheme(mode) {
       MuiTooltip: {
         styleOverrides: {
           tooltip: {
-            borderRadius: 4,
+            borderRadius: 8,
             padding: '4px 10px',
             fontSize: '0.75rem',
             fontWeight: 400,
@@ -358,24 +392,24 @@ function buildTheme(mode) {
       MuiAlert: {
         styleOverrides: {
           root: ({ theme }) => ({
-            borderRadius: 6,
+            borderRadius: 10,
             animation: 'slideUp 0.3s ease',
           }),
           standardError: ({ theme }) => ({
-            backgroundColor: theme.palette.mode === 'dark' ? '#3c2121' : '#fce8e6',
-            color: theme.palette.mode === 'dark' ? '#f28b82' : '#c5221f',
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(248,113,113,0.12)' : '#fee2e2',
+            color: theme.palette.mode === 'dark' ? '#f87171' : '#dc2626',
           }),
           standardSuccess: ({ theme }) => ({
-            backgroundColor: theme.palette.mode === 'dark' ? '#1d3525' : '#e6f4ea',
-            color: theme.palette.mode === 'dark' ? '#81c995' : '#1e8e3e',
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(52,211,153,0.12)' : '#d1fae5',
+            color: theme.palette.mode === 'dark' ? '#34d399' : '#059669',
           }),
           standardWarning: ({ theme }) => ({
-            backgroundColor: theme.palette.mode === 'dark' ? '#352f1c' : '#fef7e0',
-            color: theme.palette.mode === 'dark' ? '#fdd663' : '#e37400',
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(251,191,36,0.12)' : '#fef3c7',
+            color: theme.palette.mode === 'dark' ? '#fbbf24' : '#d97706',
           }),
           standardInfo: ({ theme }) => ({
-            backgroundColor: theme.palette.mode === 'dark' ? '#1a2433' : '#e8f0fe',
-            color: theme.palette.mode === 'dark' ? '#8ab4f8' : '#1a73e8',
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(165,180,252,0.12)' : '#e0e7ff',
+            color: theme.palette.mode === 'dark' ? '#a5b4fc' : '#4338ca',
           }),
         },
       },

@@ -37,7 +37,7 @@ async function getInventory(orgId, filters = {}) {
  * Add a new inventory item
  */
 async function addItem(orgId, userId, data) {
-  const { itemName, category, quantity, minStockLevel, unitPrice } = data;
+  const { itemName, category, quantity, unit, minStockLevel, unitPrice } = data;
 
   if (!itemName || !category) {
     throw new Error('Item name and category are required');
@@ -56,6 +56,7 @@ async function addItem(orgId, userId, data) {
       itemName,
       category,
       quantity: parseInt(quantity) || 0,
+      unit: unit || 'unit',
       minStockLevel: parseInt(minStockLevel) || 5,
       unitPrice: unitPrice ? parseFloat(unitPrice) : null,
       organizationId: orgId,
@@ -76,22 +77,34 @@ async function updateStock(itemId, orgId, userId, quantity, type = 'set') {
     throw new Error('Inventory item not found');
   }
 
-  let newQuantity;
+  const qty = Number.parseInt(quantity, 10);
+  const safeQty = Number.isFinite(qty) ? qty : 0;
+
+  let updated;
   if (type === 'add') {
-    newQuantity = item.quantity + parseInt(quantity);
+    // Atomic increment — two concurrent adds cannot clobber each other.
+    updated = await prisma.inventory.update({
+      where: { id: itemId },
+      data: { quantity: { increment: safeQty } }
+    });
   } else if (type === 'deduct') {
-    newQuantity = Math.max(0, item.quantity - parseInt(quantity));
+    // Atomic decrement guarded so it never pushes stock below zero.
+    const res = await prisma.inventory.updateMany({
+      where: { id: itemId, organizationId: orgId, quantity: { gte: safeQty } },
+      data: { quantity: { decrement: safeQty } }
+    });
+    updated = res.count === 0
+      ? await prisma.inventory.update({ where: { id: itemId }, data: { quantity: 0 } })
+      : await prisma.inventory.findUnique({ where: { id: itemId } });
   } else {
-    newQuantity = Math.max(0, parseInt(quantity));
+    updated = await prisma.inventory.update({
+      where: { id: itemId },
+      data: { quantity: safeQty }
+    });
   }
 
-  const updated = await prisma.inventory.update({
-    where: { id: itemId },
-    data: { quantity: newQuantity }
-  });
-
   const action = type === 'add' ? 'stock_added' : type === 'deduct' ? 'stock_deducted' : 'stock_set';
-  logActivity(userId, action, 'Inventory', itemId, `Stock updated: ${item.itemName} → ${newQuantity} (${type}: ${quantity})`, orgId);
+  logActivity(userId, action, 'Inventory', itemId, `Stock updated: ${item.itemName} → ${updated.quantity} (${type}: ${safeQty})`, orgId);
 
   // Check if stock is now below minimum and alert
   if (updated.quantity <= updated.minStockLevel) {

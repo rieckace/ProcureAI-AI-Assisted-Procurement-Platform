@@ -1,6 +1,19 @@
+const { formatINR } = require('../lib/format');
+
 /**
  * Email templates for ProcureAI
  */
+
+// Escape user-controlled values before interpolating into HTML emails so a
+// malicious item name / justification / username cannot inject markup.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function getBaseTemplate(content) {
   return `
@@ -49,7 +62,7 @@ function getBaseTemplate(content) {
 function getQuoteRequestTemplate(vendorName, pr, frontendUrl) {
   const content = `
     <h2 style="color: #1a73e8; margin: 0 0 20px;">📋 Quote Request</h2>
-    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${vendorName}</strong>,</p>
+    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${escapeHtml(vendorName)}</strong>,</p>
     <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
       You have been invited to provide a quote for the following procurement request:
     </p>
@@ -57,28 +70,28 @@ function getQuoteRequestTemplate(vendorName, pr, frontendUrl) {
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 120px;">Item Name</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${pr.itemName}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(pr.itemName)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Category</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${pr.category}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${escapeHtml(pr.category)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Quantity</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${pr.quantity} units</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${escapeHtml(pr.quantity)} ${escapeHtml(pr.unit || 'units')}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Budget</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">$${pr.budget.toLocaleString()}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${formatINR(pr.budget)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Urgency</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; text-transform: capitalize;">${pr.urgency}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; text-transform: capitalize;">${escapeHtml(pr.urgency)}</td>
       </tr>
       ${pr.justification ? `
       <tr>
         <td style="padding: 8px 12px; color: #666; font-size: 13px;">Justification</td>
-        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${pr.justification}</td>
+        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${escapeHtml(pr.justification)}</td>
       </tr>` : ''}
     </table>
 
@@ -104,7 +117,7 @@ function getQuoteRequestTemplate(vendorName, pr, frontendUrl) {
 function getPurchaseOrderTemplate(vendorName, po, frontendUrl) {
   const content = `
     <h2 style="color: #1a73e8; margin: 0 0 20px;">📦 Purchase Order Confirmed</h2>
-    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Dear <strong>${vendorName}</strong>,</p>
+    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Dear <strong>${escapeHtml(vendorName)}</strong>,</p>
     <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
       We are pleased to inform you that a purchase order has been issued for the following:
     </p>
@@ -112,23 +125,23 @@ function getPurchaseOrderTemplate(vendorName, po, frontendUrl) {
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 120px;">Item Name</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${po.itemName}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(po.itemName)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Quantity</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${po.quantity} units</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${escapeHtml(po.quantity)} ${escapeHtml(po.unit || 'units')}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Total Price</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #1a73e8; font-size: 16px; font-weight: 600;">$${po.price.toLocaleString()}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #1a73e8; font-size: 16px; font-weight: 600;">${formatINR(po.price)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Expected Delivery</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">Within ${po.deliveryDays} days</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">Within ${escapeHtml(po.deliveryDays)} days</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; color: #666; font-size: 13px;">Urgency</td>
-        <td style="padding: 8px 12px; color: #333; font-size: 14px; text-transform: capitalize;">${po.urgency}</td>
+        <td style="padding: 8px 12px; color: #333; font-size: 14px; text-transform: capitalize;">${escapeHtml(po.urgency)}</td>
       </tr>
     </table>
 
@@ -156,17 +169,17 @@ function getInvitationTemplate(userEmail, invitationLink, orgName) {
     <h2 style="color: #1a73e8; margin: 0 0 20px;">🎉 You're Invited!</h2>
     <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello,</p>
     <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
-      You have been invited to join <strong>${orgName}</strong> on ProcureAI — the AI-powered procurement system.
+      You have been invited to join <strong>${escapeHtml(orgName)}</strong> on ProcureAI — the AI-powered procurement system.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
       <tr>
         <td style="padding: 8px 12px; color: #666; font-size: 13px; width: 120px;">Email</td>
-        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${userEmail}</td>
+        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${escapeHtml(userEmail)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; color: #666; font-size: 13px;">Organization</td>
-        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${orgName}</td>
+        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${escapeHtml(orgName)}</td>
       </tr>
     </table>
 
@@ -200,7 +213,7 @@ function getVendorQuoteEmailTemplate(vendorName, pr, quoteFormUrl, expiresAt) {
 
   const content = `
     <h2 style="color: #1a73e8; margin: 0 0 20px;">📋 Quote Request — Action Required</h2>
-    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Dear <strong>${vendorName}</strong>,</p>
+    <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Dear <strong>${escapeHtml(vendorName)}</strong>,</p>
     <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
       You have been invited to submit a quote for the following procurement request. Please review the details below and submit your proposal using the secure link.
     </p>
@@ -208,28 +221,28 @@ function getVendorQuoteEmailTemplate(vendorName, pr, quoteFormUrl, expiresAt) {
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 140px;">Item</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${pr.itemName}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(pr.itemName)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Category</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${pr.category}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${escapeHtml(pr.category)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Quantity</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${pr.quantity} units</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px;">${escapeHtml(pr.quantity)} ${escapeHtml(pr.unit || 'units')}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Budget</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #1a73e8; font-size: 14px; font-weight: 600;">$${pr.budget.toLocaleString()}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #1a73e8; font-size: 14px; font-weight: 600;">${formatINR(pr.budget)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Urgency</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; text-transform: capitalize;">${pr.urgency}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; text-transform: capitalize;">${escapeHtml(pr.urgency)}</td>
       </tr>
       ${pr.justification ? `
       <tr>
         <td style="padding: 8px 12px; color: #666; font-size: 13px;">Justification</td>
-        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${pr.justification}</td>
+        <td style="padding: 8px 12px; color: #333; font-size: 14px;">${escapeHtml(pr.justification)}</td>
       </tr>` : ''}
     </table>
 

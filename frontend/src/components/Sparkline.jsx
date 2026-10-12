@@ -5,9 +5,9 @@ import { AreaChart, Area, ResponsiveContainer } from 'recharts';
  * Sparkline — a tiny no-axis trend chart.
  *
  * Usage:
- *   <Sparkline data={[3, 5, 2, 8, 7, 9, 6]} color="#1a73e8" height={42} />
+ *   <Sparkline data={[3, 5, 2, 8, 7, 9, 6]} color="#6366f1" height={42} />
  */
-export default function Sparkline({ data = [], color = '#1a73e8', height = 42 }) {
+export default function Sparkline({ data = [], color = '#6366f1', height = 42 }) {
   const gid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const points = data.map((v, i) => ({ i, v }));
   if (points.length === 0) points.push({ i: 0, v: 0 });

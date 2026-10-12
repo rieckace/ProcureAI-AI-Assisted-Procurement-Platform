@@ -291,21 +291,32 @@ router.post('/accept-invite/:token', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email: invite.email,
-        password: hashedPassword,
-        role: invite.role,
-        organizationId: invite.organizationId
-      },
-      include: { organization: true }
+
+    // Atomically claim the token and create the user so two concurrent accepts
+    // cannot both pass the `used` check. If user creation fails, the claim is
+    // rolled back and the invitation remains usable.
+    let user = null;
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.inviteToken.updateMany({
+        where: { id: invite.id, used: false },
+        data: { used: true }
+      });
+      if (claimed.count === 0) return;
+      user = await tx.user.create({
+        data: {
+          name,
+          email: invite.email,
+          password: hashedPassword,
+          role: invite.role,
+          organizationId: invite.organizationId
+        },
+        include: { organization: true }
+      });
     });
 
-    await prisma.inviteToken.update({
-      where: { id: invite.id },
-      data: { used: true }
-    });
+    if (!user) {
+      return res.status(400).json({ error: 'Invitation already used' });
+    }
 
     const jwtToken = generateToken(user, invite.organization?.slug);
 

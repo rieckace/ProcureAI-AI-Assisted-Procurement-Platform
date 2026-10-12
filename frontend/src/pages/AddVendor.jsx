@@ -75,8 +75,8 @@ export default function AddVendor() {
       {/* Header Banner */}
       <Box sx={{
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(129,140,248,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.03) 100%)',
         borderRadius: 3,
         p: 3,
         mb: 3,
@@ -123,6 +123,12 @@ export default function AddVendor() {
                   type="email"
                   value={form.email}
                   onChange={handleChange('email')}
+                  onBlur={() => {
+                    const email = form.email.trim();
+                    if (email && !/\S+@\S+\.\S+/.test(email)) {
+                      setErrors(prev => ({ ...prev, email: 'Invalid email format' }));
+                    }
+                  }}
                   error={!!errors.email}
                   helperText={errors.email}
                   required

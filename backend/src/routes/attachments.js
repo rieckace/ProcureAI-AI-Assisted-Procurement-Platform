@@ -34,6 +34,24 @@ const upload = multer({
   },
 });
 
+// Wrap multer so validation/size errors are returned as clean 400s instead of
+// falling through to the global 500 handler.
+const uploadMiddleware = (req, res, next) => {
+  upload.array('files', 5)(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File too large (max 10MB)' });
+      }
+      if (err.code === 'LIMIT_UNEXPECTED_FILE' || err.message === 'File type not allowed') {
+        return res.status(400).json({ error: err.message || 'Invalid file' });
+      }
+      logger.error('attachments.multer', err);
+      return res.status(400).json({ error: 'Upload failed. Please try again.' });
+    }
+    next();
+  });
+};
+
 router.get('/purchase-requests/:prId/attachments', authenticate, async (req, res) => {
   try {
     const pr = await prisma.purchaseRequest.findUnique({ where: { id: req.params.prId } });
@@ -53,7 +71,7 @@ router.get('/purchase-requests/:prId/attachments', authenticate, async (req, res
   }
 });
 
-router.post('/purchase-requests/:prId/attachments', authenticate, upload.array('files', 5), async (req, res) => {
+router.post('/purchase-requests/:prId/attachments', authenticate, uploadMiddleware, async (req, res) => {
   try {
     const pr = await prisma.purchaseRequest.findUnique({ where: { id: req.params.prId } });
     if (!pr || pr.organizationId !== req.user.organizationId) {

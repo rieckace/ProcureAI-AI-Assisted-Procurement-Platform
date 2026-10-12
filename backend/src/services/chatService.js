@@ -86,6 +86,10 @@ When a user asks you to perform an action (like creating a PR or updating status
 
 ## RESPONSE GUIDELINES
 - When showing data, format it nicely with bullet points or short summaries
+- ALWAYS render lists and recommendations as BULLET POINTS (each item starting with "- " or "1. " on its own line), never as a block of prose
+- Use short markdown headings (e.g. "## ✅ Recommendation", "## 🧠 Why") to separate sections of a recommendation — the frontend renders these as real headings and bullets
+- Explain reasoning in plain, everyday language; avoid jargon, internal scores, or percentages
+- When you summarize a recommendation from a tool, PRESERVE its bullet structure — do not flatten it into a paragraph
 - When the user asks "what should I do next?" or similar, consider their role and the current page context
 - Suggest specific actions the user can take
 - If you're unsure about something, be honest about it
@@ -133,7 +137,7 @@ function getLocalResponse(message, userName, userRole) {
 
   // Create a purchase request
   if (lowerMsg.includes('create') && (lowerMsg.includes('purchase') || lowerMsg.includes('request') || lowerMsg.includes('pr'))) {
-    return `📝 **How to Create a Purchase Request:**\n\n1. Go to **New Request** page (click the + button or navigate to /new-request)\n2. Fill in the details:\n   - **Item Name** — What you want to purchase\n   - **Category** — IT, Office Supplies, Furniture, Software, Services, or Equipment\n   - **Quantity** — How many units you need\n   - **Budget** — Total budget in dollars\n   - **Urgency** — Low, Medium, High, or Critical\n   - **Justification** — Why you need this (optional but recommended)\n3. Click **Submit**\n\nYour request will go to procurement officers who will collect quotes from vendors!`;
+    return `📝 **How to Create a Purchase Request:**\n\n1. Go to **New Request** page (click the + button or navigate to /new-request)\n2. Fill in the details:\n   - **Item Name** — What you want to purchase\n   - **Category** — Rice, Flour, Oil, Packaging, Equipment, Services, or Logistics\n   - **Quantity** — How many you need (e.g. 22 kg, 500 bags, 10 units)\n   - **Budget** — Total budget\n   - **Urgency** — Low, Medium, High, or Critical\n   - **Justification** — Why you need this (optional but recommended)\n3. Click **Submit**\n\nYour request will go to procurement officers who will collect quotes from vendors!`;
   }
 
   // How the system works / procurement process
@@ -143,7 +147,7 @@ function getLocalResponse(message, userName, userRole) {
 
   // Vendor information
   if (lowerMsg.includes('vendor') && (lowerMsg.includes('add') || lowerMsg.includes('manage') || lowerMsg.includes('find'))) {
-    return `📄 **Vendor Management:**\n\n**To Add a New Vendor:**\n1. Go to **Vendor Management** (/manage-vendors)\n2. Click **Add Vendor**\n3. Fill in vendor details:\n   - Name, Email, Phone\n   - Category (IT, Office Supplies, etc.)\n   - Address\n4. Save the vendor\n\n**To View Vendors:**\n- Visit /manage-vendors to see all vendors\n- Use the search and filter options to find specific vendors\n\nVendors can then be assigned to quotes for purchase requests!`;
+    return `📄 **Vendor Management:**\n\n**To Add a New Vendor:**\n1. Go to **Vendor Management** (/manage-vendors)\n2. Click **Add Vendor**\n3. Fill in vendor details:\n   - Name, Email, Phone\n   - Category (Rice, Flour, Oil, Packaging, etc.)\n4. Save the vendor\n\n**To See a Vendor's Products:**\n- Click any vendor in the list to open their catalog — products, units (kg/litre/unit), prices, and stock status\n\n**To View Vendors:**\n- Visit /manage-vendors to see all vendors\n- Use the search and filter options to find specific vendors\n\nVendors can then be assigned to quotes for purchase requests!`;
   }
 
   // Dashboard information
@@ -220,7 +224,7 @@ const TOOLS = [
         properties: {
           category: {
             type: 'string',
-            description: 'Filter by vendor category (IT, Office Supplies, Furniture, Software, Services, Equipment)'
+            description: 'Filter by vendor category (Rice, Flour, Oil, Packaging, Equipment, Services, Logistics)'
           },
           search: {
             type: 'string',
@@ -334,16 +338,21 @@ const TOOLS = [
           },
           category: {
             type: 'string',
-            enum: ['IT', 'Office Supplies', 'Furniture', 'Software', 'Services', 'Equipment'],
+            enum: ['Rice', 'Flour', 'Oil', 'Packaging', 'Equipment', 'Services', 'Logistics'],
             description: 'Category of the item (required)'
           },
           quantity: {
             type: 'number',
             description: 'Number of units to purchase (required, minimum 1)'
           },
+          unit: {
+            type: 'string',
+            enum: ['kg', 'litre', 'unit', 'bag', 'sack', 'can', 'roll', 'set', 'ton'],
+            description: 'Unit of measurement for the quantity, e.g. kg, litre, bag (optional, defaults to unit)'
+          },
           budget: {
             type: 'number',
-            description: 'Total budget in dollars (required, minimum $1)'
+            description: 'Total budget in Indian Rupees (required, minimum ₹1)'
           },
           urgency: {
             type: 'string',
@@ -421,7 +430,11 @@ const TOOLS = [
           },
           price: {
             type: 'number',
-            description: 'Quote price in dollars (required, must be greater than 0)'
+            description: 'Total quote price (required unless unitPrice is provided)'
+          },
+          unitPrice: {
+            type: 'number',
+            description: 'Price per unit (kg/litre/unit) — if provided, total = unitPrice × quantity'
           },
           deliveryDays: {
             type: 'number',
@@ -603,7 +616,8 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         }
       });
 
-      if (!pr) return JSON.stringify({ error: 'Purchase request not found' });
+      if (!pr || pr.organizationId !== organizationId) return JSON.stringify({ error: 'Purchase request not found' });
+      if (userRole === 'manager' && pr.userId !== userId) return JSON.stringify({ error: 'Access denied' });
 
       return JSON.stringify({
         id: pr.id,
@@ -804,7 +818,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         return JSON.stringify({ error: 'Missing required fields: itemName, category, quantity, budget, urgency' });
       }
 
-      const validCategories = ['IT', 'Office Supplies', 'Furniture', 'Software', 'Services', 'Equipment'];
+      const validCategories = ['Rice', 'Flour', 'Oil', 'Packaging', 'Equipment', 'Services', 'Logistics'];
       if (!validCategories.includes(parsed.category)) {
         return JSON.stringify({ error: `Category must be one of: ${validCategories.join(', ')}` });
       }
@@ -829,6 +843,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
           itemName: parsed.itemName,
           category: parsed.category,
           quantity,
+          unit: parsed.unit || 'unit',
           budget,
           urgency: parsed.urgency,
           justification: parsed.justification || '',
@@ -876,7 +891,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         where: { id: parsed.prId }
       });
 
-      if (!existingPr) {
+      if (!existingPr || existingPr.organizationId !== organizationId) {
         return JSON.stringify({ error: 'Purchase request not found.' });
       }
 
@@ -983,12 +998,27 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         return JSON.stringify({ error: 'Only officers and admins can add quotes.' });
       }
 
-      if (!parsed.prId || !parsed.vendorId || !parsed.price || !parsed.deliveryDays) {
-        return JSON.stringify({ error: 'Missing required fields: prId, vendorId, price, deliveryDays' });
+      if (!parsed.prId || !parsed.vendorId || (!parsed.price && !parsed.unitPrice) || !parsed.deliveryDays) {
+        return JSON.stringify({ error: 'Missing required fields: prId, vendorId, price (or unitPrice), deliveryDays' });
       }
 
-      const price = parseFloat(parsed.price);
-      if (price <= 0) {
+      // Per-unit price → total = unitPrice × PR quantity (e.g. 22kg at ₹50/kg = ₹1100)
+      let price = parsed.price !== undefined ? parseFloat(parsed.price) : null;
+      if (parsed.unitPrice !== undefined) {
+        if (parseFloat(parsed.unitPrice) <= 0) {
+          return JSON.stringify({ error: 'Unit price must be greater than 0.' });
+        }
+        const prForCalc = await prisma.purchaseRequest.findUnique({
+          where: { id: parsed.prId },
+          select: { quantity: true },
+        });
+        if (!prForCalc) {
+          return JSON.stringify({ error: 'Purchase request not found.' });
+        }
+        price = Math.round(parseFloat(parsed.unitPrice) * prForCalc.quantity * 100) / 100;
+      }
+
+      if (!price || price <= 0) {
         return JSON.stringify({ error: 'Price must be greater than 0.' });
       }
 
@@ -1011,7 +1041,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         where: { id: parsed.vendorId }
       });
 
-      if (!vendor) {
+      if (!vendor || vendor.organizationId !== organizationId) {
         return JSON.stringify({ error: 'Vendor not found.' });
       }
 
@@ -1034,6 +1064,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
           prId: parsed.prId,
           vendorId: parsed.vendorId,
           price,
+          unitPrice: parsed.unitPrice !== undefined ? parseFloat(parsed.unitPrice) : undefined,
           deliveryDays,
           organizationId
         },
@@ -1048,7 +1079,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
         });
       }
 
-      logActivity(userId, 'added_quote', 'PurchaseRequest', parsed.prId, `Added quote from ${vendor.name}: $${price} via Procura`, organizationId);
+      logActivity(userId, 'added_quote', 'PurchaseRequest', parsed.prId, `Added quote from ${vendor.name}: ₹${price} via Procura`, organizationId);
 
       // Try to send quote request email to vendor
       let emailPreviewUrl = null;
@@ -1067,7 +1098,7 @@ async function executeToolCall(toolCall, userId, organizationId, userRole) {
       return JSON.stringify({
         success: true,
         action: 'quote_added',
-        message: `Quote added from ${vendor.name} for $${price}!`,
+        message: `Quote added from ${vendor.name} for ₹${price}!`,
         quote: {
           vendor: vendor.name,
           price,

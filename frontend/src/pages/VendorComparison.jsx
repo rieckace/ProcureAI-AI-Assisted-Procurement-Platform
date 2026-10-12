@@ -10,6 +10,7 @@ import {
   TrendingDown, LocalShipping, Star, Shield
 } from '@mui/icons-material';
 import api from '../api';
+import { renderMarkdown } from '../utils/renderMarkdown';
 
 const COMPLETED_STATUSES = ['ordered', 'delivered'];
 
@@ -93,6 +94,18 @@ export default function VendorComparison() {
   const topVendor = rankedVendors?.[0];
   const isCompleted = COMPLETED_STATUSES.includes(pr.status);
 
+  // "Lead" badges: best performer per metric
+  const cheapest = rankedVendors?.length ? [...rankedVendors].sort((a, b) => a.price - b.price)[0] : null;
+  const fastest = rankedVendors?.length ? [...rankedVendors].sort((a, b) => a.deliveryDays - b.deliveryDays)[0] : null;
+  const mostReliable = rankedVendors?.length ? [...rankedVendors].sort((a, b) => b.onTimeDelivery - a.onTimeDelivery)[0] : null;
+  const leads = {};
+  rankedVendors?.forEach(v => {
+    leads[v.vendorId] = [];
+    if (cheapest?.vendorId === v.vendorId) leads[v.vendorId].push({ label: 'Lowest Cost', color: '#10b981' });
+    if (fastest?.vendorId === v.vendorId) leads[v.vendorId].push({ label: 'Fastest Delivery', color: '#0ea5e9' });
+    if (mostReliable?.vendorId === v.vendorId) leads[v.vendorId].push({ label: 'Most Reliable', color: '#6366f1' });
+  });
+
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
       <Button startIcon={<ArrowBack />} onClick={() => navigate(`/pr/${id}`)} sx={{ mb: 3, color: 'text.secondary' }}>
@@ -105,7 +118,7 @@ export default function VendorComparison() {
           Vendor Comparison
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {pr.itemName} — {pr.quantity} units, Budget: ${pr.budget.toLocaleString()}
+          {pr.itemName} — {pr.quantity} {pr.unit || 'units'}, Budget: ₹{pr.budget.toLocaleString('en-IN')}
           {pr.status && (
             <Chip
               label={pr.status}
@@ -126,13 +139,13 @@ export default function VendorComparison() {
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" sx={{ opacity: 0.85 }}>Potential Cost Savings</Typography>
                 <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  ${costAnalysis.potentialSavings.toLocaleString()}
+                  ₹{costAnalysis.potentialSavings.toLocaleString('en-IN')}
                 </Typography>
               </Box>
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.3)' }} />
               <Box>
                 <Typography variant="body2" sx={{ opacity: 0.85 }}>Avg. Vendor Price</Typography>
-                <Typography variant="h6" fontWeight={600}>${costAnalysis.averagePrice.toLocaleString()}</Typography>
+                <Typography variant="h6" fontWeight={600}>₹{costAnalysis.averagePrice.toLocaleString('en-IN')}</Typography>
               </Box>
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.3)' }} />
               <Box>
@@ -162,15 +175,15 @@ export default function VendorComparison() {
         <CardContent sx={{ p: 3, pt: 3.5 }}>
           {recommendation?.fallback && (
             <Chip
-              label="Fallback Mode - Groq API not configured"
+              label="Automatic analysis (AI unavailable)"
               size="small"
               color="warning"
               sx={{ mb: 1.5 }}
             />
           )}
-          <Typography variant="body1" sx={{ lineHeight: 1.8, color: 'text.primary', fontSize: '1rem' }}>
-            {recommendation?.explanation || 'No recommendation available'}
-          </Typography>
+          <Box sx={{ '& p': { mb: 1 }, '& ul, & ol': { my: 0.5 } }}>
+            {renderMarkdown(recommendation?.explanation || 'No recommendation available')}
+          </Box>
 
           {topVendor && (
             <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -182,7 +195,7 @@ export default function VendorComparison() {
               />
               <Chip
                 icon={<TrendingDown />}
-                label={`$${topVendor.price.toLocaleString()}`}
+                label={`₹${topVendor.price.toLocaleString('en-IN')}`}
                 variant="outlined"
               />
               <Chip
@@ -195,8 +208,25 @@ export default function VendorComparison() {
         </CardContent>
       </Card>
 
-      {/* Ranked Vendors */}
-      <Typography variant="h6" sx={{ mb: 2 }}>Ranked Vendors</Typography>
+      {/* Ranked Vendors — Quote Matrix */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <Typography variant="h6">Quote Matrix</Typography>
+        <Chip
+          icon={<TrendingDown sx={{ fontSize: 14 }} />}
+          label={`${rankedVendors?.length || 0} vendor${rankedVendors?.length > 1 ? 's' : ''}`}
+          size="small"
+          variant="outlined"
+          sx={{ height: 22, fontSize: '0.7rem' }}
+        />
+        {topVendor && (
+          <Chip
+            icon={<EmojiEvents sx={{ fontSize: 14 }} />}
+            label="AI ranked"
+            size="small"
+            sx={{ height: 22, fontSize: '0.7rem', backgroundColor: 'rgba(245,158,11,0.12)', color: '#d97706', fontWeight: 600 }}
+          />
+        )}
+      </Box>
 
       <Card>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -231,6 +261,21 @@ export default function VendorComparison() {
                         variant={i === 0 ? 'filled' : 'outlined'}
                         sx={{ fontWeight: 700, minWidth: 40 }}
                       />
+                      {i === 0 && !recommendation?.fallback && (
+                        <Box sx={{ mt: 0.5 }}>
+                          <Chip
+                            label="Top Recommendation"
+                            size="small"
+                            sx={{
+                              height: 18,
+                              fontSize: '0.58rem',
+                              fontWeight: 700,
+                              backgroundColor: 'rgba(99,102,241,0.12)',
+                              color: '#4f46e5',
+                            }}
+                          />
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight={i === 0 ? 700 : 500}>
@@ -239,29 +284,92 @@ export default function VendorComparison() {
                       <Typography variant="caption" color="text.secondary">
                         {v.category} • {v.onTimeDelivery}% on-time
                       </Typography>
+                      {leads[v.vendorId]?.length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                          {leads[v.vendorId].map(b => (
+                            <Chip
+                              key={b.label}
+                              label={b.label}
+                              size="small"
+                              sx={{
+                                height: 16,
+                                fontSize: '0.55rem',
+                                fontWeight: 700,
+                                backgroundColor: `${b.color}1a`,
+                                color: b.color,
+                              }}
+                            />
+                          ))}
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell align="center">
-                      <Typography variant="body2" fontWeight={500}>${v.price.toLocaleString()}</Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={cheapest?.vendorId === v.vendorId ? 800 : 500}
+                        color={cheapest?.vendorId === v.vendorId ? 'success.main' : 'inherit'}
+                      >
+                        ₹{v.price.toLocaleString('en-IN')}
+                        {cheapest?.vendorId === v.vendorId && (
+                          <Box component="span" sx={{ fontSize: '0.6rem', ml: 0.4, color: '#10b981' }}>●</Box>
+                        )}
+                      </Typography>
+                      {v.unitPrice && (
+                        <Typography variant="caption" color="text.secondary">₹{v.unitPrice.toLocaleString()}/{pr.unit || 'unit'}</Typography>
+                      )}
                       <LinearProgress
                         variant="determinate"
                         value={(v.scores.price / 35) * 100}
-                        sx={{ mt: 0.5, height: 4, borderRadius: 2, bgcolor: 'action.hover' }}
+                        sx={{
+                          mt: 0.5,
+                          height: 4,
+                          borderRadius: 2,
+                          bgcolor: 'action.hover',
+                          '& .MuiLinearProgress-bar': { backgroundColor: cheapest?.vendorId === v.vendorId ? '#10b981' : '#34d399' },
+                        }}
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <Typography variant="body2">{v.deliveryDays}d</Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={fastest?.vendorId === v.vendorId ? 800 : 500}
+                        color={fastest?.vendorId === v.vendorId ? 'success.main' : 'inherit'}
+                      >
+                        {v.deliveryDays}d
+                        {fastest?.vendorId === v.vendorId && (
+                          <Box component="span" sx={{ fontSize: '0.6rem', ml: 0.4, color: '#10b981' }}>●</Box>
+                        )}
+                      </Typography>
                       <LinearProgress
                         variant="determinate"
                         value={(v.scores.delivery / 20) * 100}
-                        sx={{ mt: 0.5, height: 4, borderRadius: 2, bgcolor: 'action.hover' }}
+                        sx={{
+                          mt: 0.5,
+                          height: 4,
+                          borderRadius: 2,
+                          bgcolor: 'action.hover',
+                          '& .MuiLinearProgress-bar': { backgroundColor: fastest?.vendorId === v.vendorId ? '#0ea5e9' : '#38bdf8' },
+                        }}
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <Typography variant="body2">{v.onTimeDelivery}%</Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={mostReliable?.vendorId === v.vendorId ? 800 : 500}
+                        color={mostReliable?.vendorId === v.vendorId ? 'success.main' : 'inherit'}
+                      >
+                        {v.onTimeDelivery}%
+                      </Typography>
                       <LinearProgress
                         variant="determinate"
                         value={(v.scores.reliability / 30) * 100}
-                        sx={{ mt: 0.5, height: 4, borderRadius: 2, bgcolor: 'action.hover' }}
+                        sx={{
+                          mt: 0.5,
+                          height: 4,
+                          borderRadius: 2,
+                          bgcolor: 'action.hover',
+                          '& .MuiLinearProgress-bar': { backgroundColor: mostReliable?.vendorId === v.vendorId ? '#6366f1' : '#818cf8' },
+                        }}
                       />
                     </TableCell>
                     <TableCell align="center">
@@ -314,10 +422,10 @@ export default function VendorComparison() {
         <CardContent sx={{ p: 3 }}>
           <Grid container spacing={3}>
             {[
-              { icon: <TrendingDown />, label: 'Price', weight: '35%', desc: 'Lower prices score higher. Normalized against the highest quote.', color: '#1a73e8' },
-              { icon: <LocalShipping />, label: 'Delivery Time', weight: '20%', desc: 'Faster delivery scores higher. Normalized against longest delivery.', color: '#34a853' },
-              { icon: <Shield />, label: 'Reliability', weight: '30%', desc: 'Based on on-time delivery rate (70%) and low defect rate (30%).', color: '#f9ab00' },
-              { icon: <Star />, label: 'Rating', weight: '15%', desc: 'Vendor rating out of 5, normalized to a 15-point scale.', color: '#ea4335' },
+              { icon: <TrendingDown />, label: 'Price', weight: '35%', desc: 'Lower prices score higher. Normalized against the highest quote.', color: '#6366f1' },
+              { icon: <LocalShipping />, label: 'Delivery Time', weight: '20%', desc: 'Faster delivery scores higher. Normalized against longest delivery.', color: '#10b981' },
+              { icon: <Shield />, label: 'Reliability', weight: '30%', desc: 'Based on on-time delivery rate (70%) and low defect rate (30%).', color: '#f59e0b' },
+              { icon: <Star />, label: 'Rating', weight: '15%', desc: 'Vendor rating out of 5, normalized to a 15-point scale.', color: '#ef4444' },
             ].map((metric) => (
               <Grid item xs={12} sm={6} key={metric.label}>
                 <Box sx={{ display: 'flex', gap: 1.5, p: 2, bgcolor: 'action.hover', borderRadius: 2, height: '100%' }}>

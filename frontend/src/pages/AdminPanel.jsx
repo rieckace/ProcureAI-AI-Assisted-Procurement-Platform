@@ -6,7 +6,7 @@ import {
   Avatar, Skeleton, InputAdornment
 } from '@mui/material';
 import {
-  PersonAdd, People, OpenInNew, Refresh, Send, Email, Shield
+  PersonAdd, People, OpenInNew, Refresh, Send, Email, Shield, Search
 } from '@mui/icons-material';
 import api from '../api';
 import EmailPreview from '../components/EmailPreview';
@@ -16,12 +16,19 @@ export default function AdminPanel() {
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
 
   // Invite form
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'officer' });
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteResult, setInviteResult] = useState(null);
+
+  const filteredUsers = memberSearch.trim()
+    ? users.filter(u =>
+        `${u.name || ''} ${u.email || ''} ${u.role || ''}`.toLowerCase().includes(memberSearch.trim().toLowerCase())
+      )
+    : users;
 
   const [toast, setToast] = useState({ open: false, message: '', severity: 'success' });
   const cancelledRef = useRef(false);
@@ -81,8 +88,8 @@ export default function AdminPanel() {
       {/* Header Banner */}
       <Box sx={{
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(129,140,248,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.03) 100%)',
         borderRadius: 3,
         p: 3,
         mb: 3,
@@ -210,6 +217,18 @@ export default function AdminPanel() {
               </Box>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>Users</Typography>
             </Box>
+            <TextField
+              size="small"
+              placeholder="Search members…"
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              sx={{ width: 220 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>
+                ),
+              }}
+            />
             <Button size="small" startIcon={<Refresh />} onClick={fetchUsers} sx={{ borderRadius: 2, textTransform: 'none' }}>
               Refresh
             </Button>
@@ -228,10 +247,12 @@ export default function AdminPanel() {
             </Box>
           ) : usersError ? (
             <Alert severity="error" sx={{ m: 2, borderRadius: 2 }}>{usersError}</Alert>
-          ) : users.length === 0 ? (
+          ) : filteredUsers.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <People sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.4 }} />
-              <Typography color="text.secondary">No users found</Typography>
+              <Typography color="text.secondary">
+                {memberSearch.trim() ? `No members match "${memberSearch.trim()}"` : 'No users found'}
+              </Typography>
             </Box>
           ) : (
             <TableContainer>
@@ -245,7 +266,7 @@ export default function AdminPanel() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {users.map((u) => (
+                  {filteredUsers.map((u) => (
                     <TableRow key={u.id} hover>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>

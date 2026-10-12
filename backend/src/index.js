@@ -25,11 +25,22 @@ const { initScheduler } = require('./services/schedulerService');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Requests arrive through the nginx proxy (docker-compose frontend). Trust that
+// single hop so express-rate-limit keyed on req.ip sees the real client instead
+// of collapsing every user into one shared proxy address.
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
 }));
 app.use(express.json());
+app.use((req, res, next) => {
+  // express.json() leaves req.body undefined for requests without a JSON
+  // payload; normalize so route handlers that read req.body don't 500.
+  if (req.body === undefined) req.body = {};
+  next();
+});
 app.use(morgan('dev'));
 
 // Disable ETags for API responses — these are dynamic, real-time endpoints
@@ -63,7 +74,7 @@ const generalLimiter = isDev
   ? (req, res, next) => next()
   : rateLimit({
       windowMs: 1 * 60 * 1000,
-      max: 200,
+      max: 600,
       message: { error: 'Too many requests, please try again later.' },
       standardHeaders: true,
       legacyHeaders: false,

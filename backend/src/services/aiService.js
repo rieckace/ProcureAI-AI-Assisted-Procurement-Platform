@@ -1,4 +1,5 @@
 const { chatCompletions } = require('./modelProvider');
+const { formatINR } = require('../lib/format');
 
 /**
  * Score vendors based on weighted criteria
@@ -111,6 +112,7 @@ function scoreVendors(quotes) {
       vendorEmail: vendor.email,
       category: vendor.category,
       price: quote.price,
+      unitPrice: quote.unitPrice || null,
       deliveryDays: quote.deliveryDays,
       onTimeDelivery,
       defectRate,
@@ -141,48 +143,72 @@ async function generateRecommendation(purchaseRequest, scoredVendors) {
     const topVendor = scoredVendors[0];
     const secondVendor = scoredVendors[1];
 
-    const prompt = `You are an AI procurement specialist analyzing vendor quotes for a purchase request.
+    const cheapestPrice = Math.min(...scoredVendors.map(v => v.price || 0));
+    const fastestDays = Math.min(...scoredVendors.map(v => v.deliveryDays || Infinity));
+
+    const prompt = `You are a friendly procurement advisor. The person reading this is NOT technical, so explain everything in plain, everyday language. Avoid buzzwords and never mention "scores", "weights", "percentages", or "points".
+
+CONTRACT — respond with EXACTLY this markdown structure, nothing else:
+
+## ✅ Recommendation
+One or two plain sentences naming the best vendor and the single most important reason. Keep it to 40 words max.
+
+## 🧠 Why this vendor is the top pick
+- one bullet per reason, max 4 bullets. Each bullet starts with a bold label (Price / Delivery speed / Reliability / Track record) followed by a one-line plain-language reason.
+
+## ⚠️ Things to keep in mind
+- 1 to 3 bullets listing any caveats (e.g. slightly over budget, slower delivery, higher defect rate).
+
+## 💰 How the prices compare
+- 1 to 2 plain bullets comparing the top pick against the runner-up.
+
+RULES:
+- Keep the whole answer under 150 words.
+- Every bullet must explain WHY (give reasoning), never just restate a fact.
+- Do not use any headings other than the four above.
 
 PURCHASE REQUEST DETAILS:
 - Item: ${purchaseRequest.itemName}
 - Category: ${purchaseRequest.category}
 - Quantity: ${purchaseRequest.quantity}
-- Budget: $${purchaseRequest.budget}
+- Budget: ${formatINR(purchaseRequest.budget)}
 - Urgency: ${purchaseRequest.urgency}
 - Justification: ${purchaseRequest.justification || 'N/A'}
 
-VENDOR RANKINGS (sorted by score):
+VENDOR COMPARISON (already ranked, best first):
 
 ${scoredVendors.map((v, i) => `#${i + 1} ${v.vendorName}
-   - Price: $${v.price} (Score: ${v.scores.price}/35)
-   - Delivery: ${v.deliveryDays} days (Score: ${v.scores.delivery}/20)
-   - On-Time Delivery: ${v.onTimeDelivery}% | Defect Rate: ${v.defectRate}%
-   - Rating: ${v.rating}/5 (Score: ${v.scores.rating}/15)
-   - Total Score: ${v.scores.total}/100`).join('\n\n')}
+   - Price: ${formatINR(v.price)} — ${v.price <= cheapestPrice ? 'the lowest quoted price' : `${formatINR(v.price - cheapestPrice)} more than the lowest`}
+   - Delivery: ${v.deliveryDays} days — ${v.deliveryDays <= fastestDays ? 'the fastest in this list' : `${v.deliveryDays - fastestDays} days slower than the fastest`}
+   - Reliability: roughly ${v.onTimeDelivery}% of orders arrive on time; about ${v.defectRate}% of items are defective
+   - Track record: past buyers rate them ${v.rating} out of 5`).join('\n\n')}
 
-${secondVendor ? `COST SAVINGS ANALYSIS (Top vs Second Best):
-- Price difference: $${Math.abs(topVendor.price - secondVendor.price)}
-- Delivery time difference: ${Math.abs(topVendor.deliveryDays - secondVendor.deliveryDays)} days` : ''}
-
-Please provide:
-1. A clear recommendation of the best vendor (max 2-3 sentences)
-2. Key factors that influenced this decision
-3. Any risks or considerations
-
-Format your response as a concise, professional recommendation. Keep it under 200 words.`;
+${secondVendor ? `COST COMPARISON (top pick vs runner-up):
+- Price difference: ${formatINR(Math.abs(topVendor.price - secondVendor.price))}
+- Delivery time difference: ${Math.abs(topVendor.deliveryDays - secondVendor.deliveryDays)} days` : ''}`;
 
     const { result } = await chatCompletions({
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 500,
+      temperature: 0.4,
+      max_tokens: 600,
       supportTools: false,
     });
 
-    const explanation = result.choices[0]?.message?.content || '';
+    const explanation = (result.choices[0]?.message?.content || '').trim();
+
+    // Reasoning models occasionally return an empty or stub response ("##"),
+    // which is unusable — fall back to the deterministic structured analysis.
+    if (explanation.length < 40) {
+      return {
+        success: false,
+        explanation: generateFallbackRecommendation(purchaseRequest, scoredVendors),
+        fallback: true,
+      };
+    }
 
     return {
       success: true,
-      explanation: explanation.trim(),
+      explanation,
       fallback: false
     };
   } catch (err) {
@@ -198,19 +224,41 @@ Format your response as a concise, professional recommendation. Keep it under 20
 
 /**
  * Fallback recommendation when all AI providers are unavailable
+ * Mirrors the structured, plain-language format used by the live model.
  */
 function generateFallbackRecommendation(purchaseRequest, scoredVendors) {
   if (!scoredVendors || scoredVendors.length === 0) return 'No vendor recommendations available.';
 
   const top = scoredVendors[0];
+  const second = scoredVendors[1];
   const budgetStr = top.price <= purchaseRequest.budget
-    ? `$${purchaseRequest.budget - top.price} under budget`
-    : `$${top.price - purchaseRequest.budget} over budget`;
+    ? `${formatINR(purchaseRequest.budget - top.price)} under budget`
+    : `${formatINR(top.price - purchaseRequest.budget)} over budget`;
 
-  return `${top.vendorName} is the top recommended vendor with a score of ${top.scores.total}/100. ` +
-    `They offer the best balance of price ($${top.price}), delivery (${top.deliveryDays} days), ` +
-    `and reliability (${top.onTimeDelivery}% on-time delivery, ${top.defectRate}% defect rate). ` +
-    `This quote is ${budgetStr}. Consider their proven track record and competitive pricing.`;
+  const sections = [`## ✅ Recommendation`,
+    `${top.vendorName} is the best fit for this request — it offers the best balance of price, delivery speed, and reliability.`,
+    ``,
+    `## 🧠 Why this vendor is the top pick`,
+    `- **Price:** ${formatINR(top.price)} — this quote is ${budgetStr}.`,
+    `- **Delivery speed:** ${top.deliveryDays} days.`,
+    `- **Reliability:** around ${top.onTimeDelivery}% of their orders arrive on time.`,
+    `- **Track record:** past buyers rate them ${top.rating} out of 5.`];
+
+  if (second) {
+    sections.push(``,
+      `## ⚠️ Things to keep in mind`,
+      `- ${second.vendorName} quoted ${formatINR(second.price)} — ${formatINR(Math.abs(top.price - second.price))} ${top.price > second.price ? 'more' : 'less'} than the top pick.`,
+      top.deliveryDays !== second.deliveryDays
+        ? `- Their delivery time is ${Math.abs(top.deliveryDays - second.deliveryDays)} day(s) ${top.deliveryDays > second.deliveryDays ? 'longer' : 'shorter'} than the runner-up.`
+        : `- Both vendors offer the same delivery time of ${top.deliveryDays} days.`);
+  } else {
+    sections.push(``,
+      `## ⚠️ Things to keep in mind`,
+      `- ${top.onTimeDelivery < 98 ? `This vendor still has about ${100 - top.onTimeDelivery}% of orders arriving late.` : `This vendor has a strong on-time record.`}`
+    );
+  }
+
+  return sections.join('\n');
 }
 
 module.exports = { scoreVendors, generateRecommendation };

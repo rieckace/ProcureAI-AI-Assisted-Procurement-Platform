@@ -6,7 +6,7 @@ import {
   Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, Snackbar, Grid, Chip, InputAdornment, useMediaQuery, useTheme
 } from '@mui/material';
-import { Add, Edit, Delete, ArrowBack, Search, Business, TrendingUp, CheckCircle, Warning, Star, StarBorder } from '@mui/icons-material';
+import { Add, Edit, Delete, ArrowBack, Search, Business, TrendingUp, CheckCircle, Warning, Star, StarBorder, Inventory2, Visibility } from '@mui/icons-material';
 import api from '../api';
 import { CATEGORIES } from '../constants';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -139,8 +139,8 @@ export default function VendorManagement() {
       {/* Header Banner */}
       <Box sx={{
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(129,140,248,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.03) 100%)',
         borderRadius: 3,
         p: 3,
         mb: 3,
@@ -157,7 +157,7 @@ export default function VendorManagement() {
             Manage Vendors
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Edit or remove vendors from the system
+            Click a vendor to view their product catalog, or edit their details
           </Typography>
         </Box>
         <Button
@@ -273,7 +273,14 @@ export default function VendorManagement() {
               </Button>
             </Box>
           ) : (
-            <TableContainer sx={{ overflowX: 'auto' }}>
+            <>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, px: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Showing {vendors.length} vendor{vendors.length !== 1 ? 's' : ''}
+                  {(search || categoryFilter !== 'all') && ' (filtered)'}
+                </Typography>
+              </Box>
+              <TableContainer sx={{ overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -288,7 +295,12 @@ export default function VendorManagement() {
                 </TableHead>
                 <TableBody>
                   {vendors.map((vendor) => (
-                    <TableRow key={vendor.id} hover>
+                    <TableRow
+                      key={vendor.id}
+                      hover
+                      onClick={() => navigate(`/manage-vendors/${vendor.id}`)}
+                      sx={{ cursor: 'pointer' }}
+                    >
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>{vendor.name}</Typography>
                         {isMobile && (
@@ -321,13 +333,22 @@ export default function VendorManagement() {
                         <Typography variant="body2" fontWeight={500}>{vendor.rating}/5</Typography>
                       </TableCell>
                       <TableCell align="right">
+                        <Tooltip title="View catalog">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/manage-vendors/${vendor.id}`); }}
+                            aria-label="View product catalog"
+                          >
+                            <Inventory2 fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => handleEdit(vendor)} aria-label="Edit vendor">
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleEdit(vendor); }} aria-label="Edit vendor">
                             <Edit fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Delete">
-                          <IconButton size="small" onClick={() => handleDeleteClick(vendor)} color="error" aria-label="Delete vendor">
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteClick(vendor); }} color="error" aria-label="Delete vendor">
                             <Delete fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -337,7 +358,8 @@ export default function VendorManagement() {
                 </TableBody>
               </Table>
             </TableContainer>
-          )}
+          </>
+        )}
         </CardContent>
       </Card>
 

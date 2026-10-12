@@ -4,11 +4,11 @@ import {
   Box, Typography, Button, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Alert, IconButton, Tooltip,
   LinearProgress, useTheme, Dialog, DialogTitle,
-  DialogContent, DialogActions, Avatar, TextField
+  DialogContent, DialogActions, TextField
 } from '@mui/material';
 import {
   SmartToy, CheckCircle, Cancel, HourglassEmpty, Visibility,
-  ThumbUp, ThumbDown, History, Refresh
+  ThumbUp, ThumbDown, History, Refresh, Schedule
 } from '@mui/icons-material';
 import api from '../api';
 import { useToast } from '../context/ToastContext';
@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { fireConfetti } from '../utils/confetti';
 import PipelineTimeline from '../components/PipelineTimeline';
 import EmptyState from '../components/EmptyState';
+import { renderMarkdown } from '../utils/renderMarkdown';
 
 const PIPELINE_STATUS_COLORS = {
   PROCESSING: { color: 'info', label: 'Processing' },
@@ -40,12 +41,20 @@ export default function AgentDashboard() {
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [detailDialog, setDetailDialog] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get('/agent/history?limit=50');
       setPipelines(res.data.data || []);
+      setLastUpdated(Date.now());
     } catch (err) {
       setError('Failed to load agent history');
     } finally {
@@ -54,6 +63,11 @@ export default function AgentDashboard() {
   }, []);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  useEffect(() => {
+    const timer = setInterval(fetchHistory, 45000);
+    return () => clearInterval(timer);
+  }, [fetchHistory]);
 
   const handleApprove = async () => {
     if (!selectedPipeline) return;
@@ -100,8 +114,8 @@ export default function AgentDashboard() {
       {/* Header */}
       <Box sx={{
         background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08), transparent)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06), transparent)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08), transparent)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06), transparent)',
         borderRadius: 3, p: 3, mb: 3, border: '1px solid', borderColor: 'divider',
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
@@ -114,10 +128,19 @@ export default function AgentDashboard() {
               Monitor autonomous procurement agent activity
             </Typography>
           </Box>
-          <Button variant="outlined" startIcon={<Refresh />} onClick={fetchHistory}
-            sx={{ borderRadius: 2, textTransform: 'none' }}>
-            Refresh
-          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Chip
+              size="small"
+              variant="outlined"
+              icon={<Schedule fontSize="small" />}
+              label={`Auto-refreshes every 45s · ${lastUpdated ? `updated ${Math.max(0, Math.round((Date.now() - lastUpdated) / 1000))}s ago` : 'loading…'}`}
+              sx={{ color: 'text.secondary', borderColor: 'divider', borderRadius: 1, fontSize: '0.7rem' }}
+            />
+            <Button variant="outlined" startIcon={<Refresh />} onClick={fetchHistory}
+              sx={{ borderRadius: 2, textTransform: 'none' }}>
+              Refresh
+            </Button>
+          </Box>
         </Box>
       </Box>
 
@@ -341,7 +364,7 @@ export default function AgentDashboard() {
                     Item: <strong>{selectedPipeline.intent.itemName}</strong>
                     {selectedPipeline.intent.quantity && ` · Qty: ${selectedPipeline.intent.quantity}`}
                     {selectedPipeline.intent.category && ` · ${selectedPipeline.intent.category}`}
-                    {selectedPipeline.intent.budget && ` · Budget: ${selectedPipeline.intent.budget.toLocaleString()}`}
+                    {selectedPipeline.intent.budget && ` · Budget: ₹${selectedPipeline.intent.budget.toLocaleString('en-IN')}`}
                     {selectedPipeline.intent.urgency && ` · Urgency: ${selectedPipeline.intent.urgency}`}
                   </Typography>
                 </Box>
@@ -355,9 +378,9 @@ export default function AgentDashboard() {
                   border: '1px solid', borderColor: 'success.main',
                 }}>
                   <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>🤖 AI Recommendation</Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                    {selectedPipeline.recommendation.explanation}
-                  </Typography>
+                  <Box sx={{ '& ul, & ol': { my: 0.5 } }}>
+                    {renderMarkdown(selectedPipeline.recommendation.explanation)}
+                  </Box>
                 </Box>
               )}
 
@@ -379,7 +402,7 @@ export default function AgentDashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="body2">
-                        ${v.price?.toLocaleString()} · {v.deliveryDays}d ·{' '}
+                        ₹{v.price?.toLocaleString('en-IN')} · {v.deliveryDays}d ·{' '}
                         <strong>{v.total}/100</strong>
                       </Typography>
                     </Box>

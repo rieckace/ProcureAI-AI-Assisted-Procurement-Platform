@@ -77,6 +77,8 @@ export function ToastProvider({ children }) {
           severity={toast.severity}
           variant="filled"
           icon={ICONS[toast.severity] || ICONS.info}
+          role="status"
+          aria-live="polite"
           sx={{
             borderRadius: 2,
             minWidth: 320,

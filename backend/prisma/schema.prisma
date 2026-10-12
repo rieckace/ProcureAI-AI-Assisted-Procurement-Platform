@@ -28,6 +28,7 @@ model Organization {
   inventoryItems   Inventory[]
   purchaseOrders   PurchaseOrder[]
   pipelines        ProcurementPipeline[]
+  vendorProducts   VendorProduct[]
 }
 
 model User {
@@ -72,8 +73,27 @@ model Vendor {
   quotes         Quote[]
   quoteRequests  QuoteRequest[]
   purchaseOrders PurchaseOrder[]
+  products       VendorProduct[]
 
   @@unique([organizationId, email])
+}
+
+model VendorProduct {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  name           String
+  category       String   // Rice, Flour, Oil, Packaging, Equipment, Services, Logistics
+  unit           String   @default("unit") // kg, litre, unit, bag, sack, can, roll, set, ton
+  unitPrice      Float    // price per 1 unit (₹/kg, ₹/litre, ₹/unit)
+  availableQty   Int      @default(0)
+  status         String   @default("available") // available, low_stock, out_of_stock, discontinued
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([vendorId, name])
 }
 
 model PurchaseRequest {
@@ -83,6 +103,7 @@ model PurchaseRequest {
   itemName       String
   category       String
   quantity       Int
+  unit           String   @default("unit") // kg, litre, unit, bag, sack, can, roll, set, ton
   budget         Float
   urgency        String   // low, medium, high, critical
   justification  String
@@ -106,6 +127,7 @@ model Quote {
   prId           String
   vendorId       String
   price          Float
+  unitPrice      Float?   // price per unit — total = unitPrice × PR quantity when set
   deliveryDays   Int
   notes          String?
   createdAt      DateTime @default(now())
@@ -182,6 +204,7 @@ model Inventory {
   itemName       String
   category       String
   quantity       Int      @default(0)
+  unit           String   @default("unit") // kg, litre, unit, bag, sack, can, roll, set, ton
   minStockLevel  Int      @default(5)
   unitPrice      Float?
   organizationId String

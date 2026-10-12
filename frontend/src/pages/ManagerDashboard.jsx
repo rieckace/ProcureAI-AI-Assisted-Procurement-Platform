@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Alert, IconButton, Tooltip,
@@ -12,6 +12,7 @@ import { useToast } from '../context/ToastContext';
 import StatusChip from '../components/StatusChip';
 import KanbanBoard from '../components/KanbanBoard';
 import UrgencyFilter from '../components/UrgencyFilter';
+import PRQuickDrawer from '../components/PRQuickDrawer';
 import { DashboardSkeleton } from '../components/Skeletons';
 import DashboardHero from '../components/DashboardHero';
 import { URGENCY_COLORS } from '../constants';
@@ -19,6 +20,7 @@ import { exportToCsv } from '../utils/exportCsv';
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const { showToast } = useToast();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -27,17 +29,34 @@ export default function ManagerDashboard() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [urgencyFilter, setUrgencyFilter] = useState('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all');
+  const [urgencyFilter, setUrgencyFilter] = useState(() => searchParams.get('urgency') || 'all');
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get('dateFrom') || '');
+  const [dateTo, setDateTo] = useState(() => searchParams.get('dateTo') || '');
+  const [page, setPage] = useState(() => parseInt(searchParams.get('page') || '1', 10) || 1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
-  const [viewMode, setViewMode] = useState('kanban');
+  const [viewMode, setViewMode] = useState(() => (searchParams.get('view') === 'table' ? 'table' : 'kanban'));
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [sortBy, setSortBy] = useState('newest');
+
+  const sortedPrs = useMemo(() => {
+    const list = [...prs];
+    if (sortBy === 'oldest') return list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    if (sortBy === 'amount') return list.sort((a, b) => (b.budget || 0) - (a.budget || 0));
+    return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [prs, sortBy]);
   const searchInputRef = useRef(null);
+  const prevQueryRef = useRef({ statusFilter: 'all', urgencyFilter: 'all', dateFrom: '', dateTo: '', search: '', viewMode: 'kanban' });
+
+  const [drawerPr, setDrawerPr] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const openDrawer = (pr) => {
+    setDrawerPr(pr);
+    setDrawerOpen(true);
+  };
 
   // Quick-search shortcut: Cmd+/ or Ctrl+/
   useEffect(() => {
@@ -50,6 +69,23 @@ export default function ManagerDashboard() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Sync filter state to the URL so it survives refresh and can be shared
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (urgencyFilter !== 'all') params.set('urgency', urgencyFilter);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    if (page > 1) params.set('page', String(page));
+    if (viewMode === 'table') params.set('view', 'table');
+
+    // useSearchParams returns a new setter after navigation. Writing the same
+    // query string unconditionally therefore creates a navigation/request loop.
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [statusFilter, urgencyFilter, dateFrom, dateTo, page, viewMode, searchParams, setSearchParams]);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -97,16 +133,32 @@ export default function ManagerDashboard() {
   }, [debouncedSearch, statusFilter, urgencyFilter, dateFrom, dateTo]);
 
   useEffect(() => {
+    const prev = prevQueryRef.current;
+    const queryChanged =
+      prev.statusFilter !== statusFilter ||
+      prev.urgencyFilter !== urgencyFilter ||
+      prev.dateFrom !== dateFrom ||
+      prev.dateTo !== dateTo ||
+      prev.search !== debouncedSearch ||
+      prev.viewMode !== viewMode;
+
+    // A filter/view change while sitting on a later page must jump back to
+    // page 1. Skip the fetch here (it would query the stale page) and let the
+    // page=1 re-render fetch exactly once instead — prevents a wasted request
+    // fired with the outdated page number.
+    if (queryChanged && page !== 1) {
+      prevQueryRef.current = { statusFilter, urgencyFilter, dateFrom, dateTo, search: debouncedSearch, viewMode };
+      setPage(1);
+      return;
+    }
+
+    prevQueryRef.current = { statusFilter, urgencyFilter, dateFrom, dateTo, search: debouncedSearch, viewMode };
     if (viewMode === 'kanban') {
       fetchAllForKanban();
     } else {
       fetchRequests();
     }
-  }, [viewMode, page, statusFilter, debouncedSearch, dateFrom, dateTo, urgencyFilter]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [statusFilter, dateFrom, dateTo, urgencyFilter, viewMode]);
+  }, [viewMode, page, statusFilter, debouncedSearch, dateFrom, dateTo, urgencyFilter, fetchAllForKanban, fetchRequests]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -149,7 +201,7 @@ export default function ManagerDashboard() {
       { label: 'Item', accessor: 'itemName' },
       { label: 'Category', accessor: 'category' },
       { label: 'Quantity', accessor: 'quantity' },
-      { label: 'Budget', accessor: (r) => `$${r.budget.toLocaleString()}` },
+      { label: 'Budget', accessor: (r) => `₹${r.budget.toLocaleString('en-IN')}` },
       { label: 'Urgency', accessor: 'urgency' },
       { label: 'Status', accessor: 'status' },
       { label: 'Quotes', accessor: (r) => r.quotes?.length || 0 },
@@ -176,27 +228,27 @@ export default function ManagerDashboard() {
         label: 'Total Requests',
         value: prs.length,
         icon: <Inbox />,
-        hex: '#1a73e8',
+        hex: '#6366f1',
         sparkline: spark,
       },
       {
         label: 'Pending',
         value: counts.pending,
         icon: <HourglassEmpty />,
-        hex: '#f9ab00',
+        hex: '#f59e0b',
         pulse: counts.pending > 0,
       },
       {
         label: 'Quoted',
         value: counts.quoted,
         icon: <FormatQuote />,
-        hex: '#4285f4',
+        hex: '#0ea5e9',
       },
       {
         label: 'Delivered',
         value: completion,
         icon: <LocalShipping />,
-        hex: '#34a853',
+        hex: '#10b981',
         ring: true,
         subLabel: `${counts.delivered} of ${prs.length} requests`,
       },
@@ -221,8 +273,8 @@ export default function ManagerDashboard() {
       {/* Header Banner */}
       <Box sx={{
         background: (theme) => theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08) 0%, rgba(100,181,246,0.04) 100%)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06) 0%, rgba(100,181,246,0.03) 100%)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08) 0%, rgba(129,140,248,0.04) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(129,140,248,0.03) 100%)',
         borderRadius: 3,
         p: 3,
         mb: 3,
@@ -390,7 +442,21 @@ export default function ManagerDashboard() {
                 </Button>
               </Tooltip>
             )}
-          </Box>
+            <Tooltip title="Sort requests">
+              <TextField
+                select
+                size="small"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                sx={{ width: 118 }}
+                SelectProps={{ sx: { fontSize: '0.78rem', py: 0.5 } }}
+              >
+                <MenuItem value="newest">Newest</MenuItem>
+                <MenuItem value="oldest">Oldest</MenuItem>
+                <MenuItem value="amount">Amount</MenuItem>
+              </TextField>
+            </Tooltip>
+            </Box>
         </CardContent>
       </Card>
 
@@ -398,7 +464,7 @@ export default function ManagerDashboard() {
 
       {/* Kanban View (read-only for managers) */}
       {viewMode === 'kanban' && (
-        <KanbanBoard prs={prs} onStatusChange={fetchAllForKanban} readOnly />
+        <KanbanBoard prs={prs} onStatusChange={fetchAllForKanban} readOnly onCardClick={openDrawer} />
       )}
 
       {/* Table View */}
@@ -456,7 +522,9 @@ export default function ManagerDashboard() {
                   right: 0,
                   bottom: 0,
                   width: 40,
-                  background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.04))',
+                  background: theme.palette.mode === 'dark'
+                    ? 'linear-gradient(to right, transparent, rgba(255,255,255,0.08))'
+                    : 'linear-gradient(to right, transparent, rgba(0,0,0,0.04))',
                   pointerEvents: 'none',
                   opacity: isMobile ? 1 : 0,
                   transition: 'opacity 0.3s ease',
@@ -478,20 +546,20 @@ export default function ManagerDashboard() {
                   </TableRow>
                 </TableHead>
                     <TableBody>
-                      {prs.map((pr) => (
-                        <TableRow key={pr.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/pr/${pr.id}`)}>
+                      {sortedPrs.map((pr) => (
+                        <TableRow key={pr.id} hover sx={{ cursor: 'pointer' }} onClick={() => openDrawer(pr)}>
                           <TableCell>
                             <Typography variant="body2" fontWeight={600}>{pr.itemName}</Typography>
                             {isMobile && (
                               <Typography variant="caption" color="text.secondary">
-                                {pr.category} · ${pr.budget.toLocaleString()} · {pr.quotes?.length || 0} quotes
+                                {pr.category} · ₹{pr.budget.toLocaleString('en-IN')} · {pr.quotes?.length || 0} quotes
                               </Typography>
                             )}
                           </TableCell>
                           {!isMobile && <TableCell>{pr.category}</TableCell>}
                           {!isMobile && <TableCell>{pr.quantity}</TableCell>}
                           <TableCell>
-                            <Typography variant="body2" fontWeight={500}>${pr.budget.toLocaleString()}</Typography>
+                            <Typography variant="body2" fontWeight={500}>₹{pr.budget.toLocaleString('en-IN')}</Typography>
                           </TableCell>
                           <TableCell>
                             <Chip
@@ -549,6 +617,15 @@ export default function ManagerDashboard() {
           </Card>
         </>
       )}
+
+      {/* Quick Preview Drawer */}
+      <PRQuickDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        pr={drawerPr}
+        onOpenFull={() => drawerPr && navigate(`/pr/${drawerPr.id}`)}
+        onCompare={() => drawerPr && navigate(`/pr/${drawerPr.id}/compare`)}
+      />
     </Box>
   );
 }

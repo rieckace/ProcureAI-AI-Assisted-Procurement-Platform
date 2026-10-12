@@ -18,7 +18,7 @@ const VALID_TRANSITIONS = {
 // POST /api/purchase-requests - Create PR (managers only)
 router.post('/', authenticate, authorize('manager', 'admin'), async (req, res) => {
   try {
-    const { itemName, category, quantity, budget, urgency, justification } = req.body;
+    const { itemName, category, quantity, unit, budget, urgency, justification } = req.body;
 
     if (!itemName || !category || !quantity || !budget || !urgency) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -42,6 +42,7 @@ router.post('/', authenticate, authorize('manager', 'admin'), async (req, res) =
         itemName,
         category,
         quantity: parseInt(quantity),
+        unit: unit || 'unit',
         budget: parseFloat(budget),
         urgency,
         justification: justification || '',
@@ -101,7 +102,12 @@ router.get('/my-requests', authenticate, authorize('manager', 'admin'), async (r
       prisma.purchaseRequest.findMany({
         where,
         include: req.query.view === 'kanban'
-          ? { _count: { select: { quotes: true } } }
+          ? {
+              _count: { select: { quotes: true } },
+              // Real quote fields (not null placeholders) so clients that peek at
+              // quotes (e.g. quick preview drawer) never hit null entries.
+              quotes: { select: { id: true, price: true, deliveryDays: true, vendor: { select: { name: true, email: true } } } },
+            }
           : { quotes: { include: { vendor: true } } },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -111,7 +117,10 @@ router.get('/my-requests', authenticate, authorize('manager', 'admin'), async (r
     ]);
 
     const data = req.query.view === 'kanban'
-      ? prs.map(pr => ({ ...pr, quotes: Array.from({ length: pr._count.quotes }) }))
+      ? prs.map(pr => {
+          const { _count, ...rest } = pr;
+          return { ...rest, quotesCount: _count.quotes, quotes: rest.quotes.filter(Boolean) };
+        })
       : prs;
 
     res.json({ data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
@@ -152,7 +161,13 @@ router.get('/', authenticate, authorize('officer', 'admin'), async (req, res) =>
       prisma.purchaseRequest.findMany({
         where,
         include: req.query.view === 'kanban'
-          ? { user: { select: { id: true, name: true, email: true } }, _count: { select: { quotes: true } } }
+          ? {
+              user: { select: { id: true, name: true, email: true } },
+              _count: { select: { quotes: true } },
+              // Real quote fields (not null placeholders) so clients that peek at
+              // quotes (e.g. quick preview drawer) never hit null entries.
+              quotes: { select: { id: true, price: true, deliveryDays: true, vendor: { select: { name: true, email: true } } } },
+            }
           : { user: { select: { id: true, name: true, email: true } }, quotes: { include: { vendor: true } } },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -162,7 +177,10 @@ router.get('/', authenticate, authorize('officer', 'admin'), async (req, res) =>
     ]);
 
     const data = req.query.view === 'kanban'
-      ? prs.map(pr => ({ ...pr, quotes: Array.from({ length: pr._count.quotes }) }))
+      ? prs.map(pr => {
+          const { _count, ...rest } = pr;
+          return { ...rest, quotesCount: _count.quotes, quotes: rest.quotes.filter(Boolean) };
+        })
       : prs;
 
     res.json({ data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
@@ -276,7 +294,7 @@ router.put('/:id', authenticate, authorize('manager', 'admin'), async (req, res)
       return res.status(400).json({ error: 'Only pending requests can be edited' });
     }
 
-    const { itemName, category, quantity, budget, urgency, justification } = req.body;
+    const { itemName, category, quantity, unit, budget, urgency, justification } = req.body;
 
     if (urgency) {
       const validUrgencies = ['low', 'medium', 'high', 'critical'];
@@ -297,6 +315,7 @@ router.put('/:id', authenticate, authorize('manager', 'admin'), async (req, res)
         itemName: itemName || undefined,
         category: category || undefined,
         quantity: quantity ? parseInt(quantity) : undefined,
+        unit: unit || undefined,
         budget: budget ? parseFloat(budget) : undefined,
         urgency: urgency || undefined,
         justification: justification !== undefined ? justification : undefined,

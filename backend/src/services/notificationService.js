@@ -1,8 +1,19 @@
 const prisma = require('../lib/prisma');
 const { sendEmail } = require('./emailService');
 const logger = require('../lib/logger');
+const { formatINR } = require('../lib/format');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// Escape user-controlled values before interpolating into HTML emails.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /**
  * Create an in-app notification for a specific user.
@@ -88,7 +99,7 @@ async function notifyStatusChange(prId, newStatus, changedBy) {
     }
 
     // Send email
-    const subject = `${statusEmojis[newStatus] || '🔄'} PR Status Update: ${pr.itemName} → ${newStatus}`;
+    const subject = `${statusEmojis[newStatus] || '🔄'} PR Status Update: ${escapeHtml(pr.itemName)} → ${newStatus}`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%); padding: 30px 40px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -97,14 +108,14 @@ async function notifyStatusChange(prId, newStatus, changedBy) {
         </div>
         <div style="background: #ffffff; padding: 30px 40px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
           <h2 style="color: #1a73e8; margin: 0 0 20px;">${statusEmojis[newStatus]} Status Changed</h2>
-          <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${user.name}</strong>,</p>
+          <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${escapeHtml(user.name)}</strong>,</p>
           <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
-            The status of your purchase request has been updated by <strong>${changedBy}</strong>.
+            The status of your purchase request has been updated by <strong>${escapeHtml(changedBy)}</strong>.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 120px;">Item</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${pr.itemName}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(pr.itemName)}</td>
             </tr>
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">New Status</td>
@@ -112,7 +123,7 @@ async function notifyStatusChange(prId, newStatus, changedBy) {
             </tr>
             <tr>
               <td style="padding: 8px 12px; color: #666; font-size: 13px;">Category</td>
-              <td style="padding: 8px 12px; color: #333; font-size: 14px;">${pr.category}</td>
+              <td style="padding: 8px 12px; color: #333; font-size: 14px;">${escapeHtml(pr.category)}</td>
             </tr>
           </table>
           <div style="text-align: center; margin: 25px 0;">
@@ -149,7 +160,7 @@ async function notifyQuoteReceived(prId, vendorName, price) {
       organizationId: pr.organizationId,
       type: 'new_quote',
       title: `💰 New Quote: ${vendorName}`,
-      message: `${vendorName} quoted $${price?.toLocaleString() || 'N/A'} for "${pr.itemName}"`,
+      message: `${vendorName} quoted ${price ? formatINR(price) : 'N/A'} for "${pr.itemName}"`,
       link: `/pr/${prId}`,
     });
 
@@ -159,13 +170,13 @@ async function notifyQuoteReceived(prId, vendorName, price) {
       role: 'officer',
       type: 'new_quote',
       title: `💰 New Quote from ${vendorName}`,
-      message: `${vendorName} quoted $${price?.toLocaleString() || 'N/A'} for "${pr.itemName}"`,
+      message: `${vendorName} quoted ${price ? formatINR(price) : 'N/A'} for "${pr.itemName}"`,
       link: `/pr/${prId}`,
       excludeUserId: user.id,
     });
 
     // Send email
-    const subject = `💰 New Quote Received: ${vendorName} quoted $${price} for ${pr.itemName}`;
+    const subject = `💰 New Quote Received: ${escapeHtml(vendorName)} quoted ${formatINR(price)} for ${escapeHtml(pr.itemName)}`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #34a853 0%, #2e7d32 100%); padding: 30px 40px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -174,26 +185,26 @@ async function notifyQuoteReceived(prId, vendorName, price) {
         </div>
         <div style="background: #ffffff; padding: 30px 40px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
           <h2 style="color: #34a853; margin: 0 0 20px;">💰 New Quote Received!</h2>
-          <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${user.name}</strong>,</p>
+          <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${escapeHtml(user.name)}</strong>,</p>
           <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
             A new quote has been submitted for your purchase request.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 120px;">Item</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${pr.itemName}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(pr.itemName)}</td>
             </tr>
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Vendor</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${vendorName}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(vendorName)}</td>
             </tr>
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Price</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #34a853; font-size: 16px; font-weight: 600;">$${price?.toLocaleString()}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #34a853; font-size: 16px; font-weight: 600;">${formatINR(price)}</td>
             </tr>
             <tr>
               <td style="padding: 8px 12px; color: #666; font-size: 13px;">Budget</td>
-              <td style="padding: 8px 12px; color: #333; font-size: 14px;">$${pr.budget.toLocaleString()}</td>
+              <td style="padding: 8px 12px; color: #333; font-size: 14px;">${formatINR(pr.budget)}</td>
             </tr>
           </table>
           <div style="text-align: center; margin: 25px 0;">
@@ -230,12 +241,12 @@ async function notifyPOIssued(prId, vendorName, price) {
       organizationId: pr.organizationId,
       type: 'po_issued',
       title: `📦 PO Issued: ${pr.itemName}`,
-      message: `Purchase Order issued to ${vendorName} for $${price?.toLocaleString() || 'N/A'}`,
+      message: `Purchase Order issued to ${vendorName} for ${price ? formatINR(price) : 'N/A'}`,
       link: `/pr/${prId}`,
     });
 
     // Send email
-    const subject = `📦 Purchase Order Issued: ${pr.itemName} → ${vendorName} ($${price})`;
+    const subject = `📦 Purchase Order Issued: ${escapeHtml(pr.itemName)} → ${escapeHtml(vendorName)} (${formatINR(price)})`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #fbbc04 0%, #f57c00 100%); padding: 30px 40px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -244,22 +255,22 @@ async function notifyPOIssued(prId, vendorName, price) {
         </div>
         <div style="background: #ffffff; padding: 30px 40px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
           <h2 style="color: #f57c00; margin: 0 0 20px;">📦 Purchase Order Issued!</h2>
-          <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${user.name}</strong>,</p>
+          <p style="color: #333; font-size: 16px; margin: 0 0 10px;">Hello <strong>${escapeHtml(user.name)}</strong>,</p>
           <p style="color: #555; font-size: 15px; margin: 0 0 20px; line-height: 1.6;">
             A purchase order has been issued for your request.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 25px;">
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px; width: 120px;">Item</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${pr.itemName}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(pr.itemName)}</td>
             </tr>
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Vendor</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${vendorName}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #333; font-size: 14px; font-weight: 500;">${escapeHtml(vendorName)}</td>
             </tr>
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #666; font-size: 13px;">Total</td>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #f57c00; font-size: 16px; font-weight: 600;">$${price?.toLocaleString()}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; color: #f57c00; font-size: 16px; font-weight: 600;">${formatINR(price)}</td>
             </tr>
           </table>
           <div style="text-align: center; margin: 25px 0;">

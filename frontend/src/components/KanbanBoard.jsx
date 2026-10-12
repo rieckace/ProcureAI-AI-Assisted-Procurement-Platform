@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
-  Box, Typography, Card, CardContent, Chip, IconButton, Tooltip, Badge, Avatar, useTheme
+  Box, Typography, Card, CardContent, Chip, IconButton, Tooltip, Avatar, useTheme
 } from '@mui/material';
 import { Visibility, CalendarToday } from '@mui/icons-material';
 import api from '../api';
@@ -23,9 +23,14 @@ function getColumnColors(theme, status) {
   return colorMap[status] || { color: theme.palette.text.secondary, bg: theme.palette.text.secondary };
 }
 
-const MemoizedPRCard = memo(function PRCard({ pr, index, readOnly, theme }) {
+const MemoizedPRCard = memo(function PRCard({ pr, index, readOnly, theme, onCardClick }) {
   const navigate = useNavigate();
   const daysAgo = Math.floor((Date.now() - new Date(pr.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+
+  const openCard = () => {
+    if (onCardClick) onCardClick(pr);
+    else navigate(`/pr/${pr.id}`);
+  };
 
   return (
     <Draggable draggableId={pr.id} index={index} isDragDisabled={readOnly}>
@@ -41,12 +46,16 @@ const MemoizedPRCard = memo(function PRCard({ pr, index, readOnly, theme }) {
             boxShadow: snapshot.isDragging
               ? '0 8px 24px rgba(0,0,0,0.25)'
               : '0 1px 3px rgba(0,0,0,0.08)',
-            transform: snapshot.isDragging ? 'rotate(2deg)' : 'none',
+            transform: snapshot.isDragging ? 'rotate(2deg)' : 'translateY(0)',
+            border: '1px solid rgba(99,102,241,0)',
+            transition: 'box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease',
             '&:hover': {
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              transform: 'translateY(-2px)',
+              boxShadow: '0 8px 20px rgba(99,102,241,0.18)',
+              borderColor: 'rgba(99,102,241,0.35)',
             },
           }}
-          onClick={() => navigate(`/pr/${pr.id}`)}
+          onClick={openCard}
         >
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -78,7 +87,7 @@ const MemoizedPRCard = memo(function PRCard({ pr, index, readOnly, theme }) {
               </Typography>
               <Typography variant="caption" color="text.secondary">·</Typography>
               <Typography variant="caption" color="text.secondary" fontWeight={500}>
-                ${pr.budget.toLocaleString()}
+                ₹{pr.budget.toLocaleString('en-IN')}
               </Typography>
             </Box>
 
@@ -119,7 +128,7 @@ const MemoizedPRCard = memo(function PRCard({ pr, index, readOnly, theme }) {
   );
 });
 
-export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
+export default function KanbanBoard({ prs, onStatusChange, readOnly = false, onCardClick }) {
   const theme = useTheme();
   const { showToast } = useToast();
   const prevPrsRef = useRef(prs);
@@ -222,6 +231,15 @@ export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
                   flex: '1 1 280px',
                   display: 'flex',
                   flexDirection: 'column',
+                  p: 1,
+                  borderRadius: 3,
+                  bgcolor: theme.palette.mode === 'dark'
+                    ? 'rgba(255,255,255,0.03)'
+                    : 'rgba(15,23,42,0.02)',
+                  border: '1px solid',
+                  borderColor: theme.palette.mode === 'dark'
+                    ? 'rgba(148,163,184,0.12)'
+                    : 'rgba(15,23,42,0.08)',
                 }}
               >
                 {/* Column Header */}
@@ -235,23 +253,28 @@ export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: col.color }} />
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: col.color, boxShadow: `0 0 0 3px ${col.color}22` }} />
                     <Typography variant="subtitle2" fontWeight={600}>
                       {labelMap[status]}
                     </Typography>
                   </Box>
-                  <Badge
-                    badgeContent={items.length}
+                  <Box
                     sx={{
-                      '& .MuiBadge-badge': {
-                        bgcolor: col.bg,
-                        color: 'white',
-                        fontWeight: 600,
-                        fontSize: '0.7rem',
-                        opacity: 0.9,
-                      },
+                      minWidth: 24,
+                      height: 20,
+                      px: 0.8,
+                      borderRadius: 999,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: `${col.color}1a`,
+                      color: col.color,
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
                     }}
-                  />
+                  >
+                    {items.length}
+                  </Box>
                 </Box>
 
                 {/* Droppable Area */}
@@ -265,7 +288,7 @@ export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
                         minHeight: 100,
                         borderRadius: 2,
                         p: 1,
-                        bgcolor: snapshot.isDraggingOver ? `rgba(${status === 'pending' ? '255,152,0' : status === 'quoted' ? '33,150,243' : status === 'ordered' ? '26,115,232' : '76,175,80'},0.06)` : 'transparent',
+                        bgcolor: snapshot.isDraggingOver ? `rgba(${status === 'pending' ? '245,158,11' : status === 'quoted' ? '99,102,241' : status === 'ordered' ? '14,165,233' : '16,185,129'},0.06)` : 'transparent',
                         border: snapshot.isDraggingOver
                           ? `2px dashed ${col.color}`
                           : '2px solid transparent',
@@ -273,7 +296,7 @@ export default function KanbanBoard({ prs, onStatusChange, readOnly = false }) {
                       }}
                     >
                       {items.map((pr, index) => (
-                        <MemoizedPRCard key={pr.id} pr={pr} index={index} readOnly={readOnly} theme={theme} />
+                        <MemoizedPRCard key={pr.id} pr={pr} index={index} readOnly={readOnly} theme={theme} onCardClick={onCardClick} />
                       ))}
                       {provided.placeholder}
                       {items.length === 0 && !snapshot.isDraggingOver && (

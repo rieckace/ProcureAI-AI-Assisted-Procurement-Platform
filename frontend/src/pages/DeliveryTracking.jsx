@@ -7,11 +7,12 @@ import {
   DialogTitle, DialogContent, DialogActions, Stepper, Step, StepLabel, StepIcon
 } from '@mui/material';
 import {
-  Search, FilterAltOff, LocalShipping, CheckCircle, Cancel, Schedule,
-  RadioButtonChecked, RadioButtonUnchecked
+  LocalShipping, Schedule, CheckCircle
 } from '@mui/icons-material';
 import api from '../api';
 import { useToast } from '../context/ToastContext';
+import EmptyState from '../components/EmptyState';
+import { CardSkeleton } from '../components/Skeletons';
 
 const DELIVERY_STEPS = ['PREPARING', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
@@ -128,13 +129,28 @@ export default function DeliveryTrackingPage() {
 
   const handleUpdateDelivery = async () => {
     if (!selectedDelivery) return;
+    const prev = selectedDelivery;
     setSubmitting(true);
     try {
       await api.put(`/deliveries/${selectedDelivery.id}`, {
         status: updateStatus,
         trackingNumber: updateTracking,
       });
-      showToast(`Delivery updated to ${updateStatus}`, 'success');
+      showToast(`Delivery updated to ${updateStatus}`, 'success', updateStatus !== prev.status ? {
+        label: 'Undo',
+        onClick: async () => {
+          try {
+            await api.put(`/deliveries/${prev.id}`, {
+              status: prev.status,
+              trackingNumber: prev.trackingNumber || '',
+            });
+            showToast('Delivery status reverted', 'info');
+            fetchDeliveries();
+          } catch {
+            showToast('Failed to undo', 'error');
+          }
+        },
+      } : null);
       setUpdateDialog(false);
       setSelectedDelivery(null);
       fetchDeliveries();
@@ -157,8 +173,8 @@ export default function DeliveryTrackingPage() {
       {/* Header */}
       <Box sx={{
         background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, rgba(138,180,248,0.08), transparent)'
-          : 'linear-gradient(135deg, rgba(26,115,232,0.06), transparent)',
+          ? 'linear-gradient(135deg, rgba(165,180,252,0.08), transparent)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.06), transparent)',
         borderRadius: 3, p: 3, mb: 3, border: '1px solid', borderColor: 'divider',
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
@@ -170,6 +186,29 @@ export default function DeliveryTrackingPage() {
             <Typography variant="body2" color="text.secondary">
               Track incoming deliveries and update shipment status
             </Typography>
+            <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label={`Total: ${deliveries.length}`}
+                icon={<LocalShipping fontSize="small" />}
+                variant="outlined"
+                sx={{ backgroundColor: 'rgba(99,102,241,0.08)', color: '#6366f1' }}
+              />
+              <Chip
+                size="small"
+                label={`In Transit: ${deliveries.filter(d => ['PREPARING','PROCESSING','SHIPPED','IN_TRANSIT','OUT_FOR_DELIVERY'].includes(d.status)).length}`}
+                icon={<Schedule fontSize="small" />}
+                variant="outlined"
+                sx={{ backgroundColor: 'rgba(245,158,11,0.08)', color: '#f59e0b' }}
+              />
+              <Chip
+                size="small"
+                label={`Delivered: ${deliveries.filter(d => d.status === 'DELIVERED').length}`}
+                icon={<CheckCircle fontSize="small" />}
+                variant="outlined"
+                sx={{ backgroundColor: 'rgba(16,185,129,0.08)', color: '#10b981' }}
+              />
+            </Box>
           </Box>
           <Button
             variant={showOverdue ? 'contained' : 'outlined'}
@@ -213,14 +252,20 @@ export default function DeliveryTrackingPage() {
       </Card>
 
       {/* Delivery Cards */}
-      {deliveries.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <LocalShipping sx={{ fontSize: 56, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
-          <Typography variant="h5" color="text.secondary">No deliveries to track</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Deliveries will appear here once purchase orders are approved
-          </Typography>
+      {loading ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
         </Box>
+      ) : deliveries.length === 0 ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              icon={<LocalShipping sx={{ fontSize: 40 }} />}
+              title="No deliveries to track"
+              description="Deliveries will appear here once purchase orders are approved and sent to vendors"
+            />
+          </CardContent>
+        </Card>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {deliveries.map((delivery) => {
